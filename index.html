@@ -1,207 +1,627 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>VNetCore | Network Infrastructure Documentation</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <img src="img/VnetCore logo.png" alt="VNetCore Logo" class="brand-logo" />
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Local network infrastructure inventory and port documentation."
+    />
+    <meta name="theme-color" content="#131515" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
+    <title>VNetCore | Network Infrastructure Documentation</title>
+    <link rel="icon" href="img/VnetCore-logo-108.png" type="image/png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">Skip to workspace</a>
+    <header class="topbar">
+      <div class="brand">
+        <img
+          src="img/VnetCore-logo-108.png"
+          alt="VNetCore Logo"
+          class="brand-logo"
+          width="54"
+          height="54"
+        />
 
-      <div>
-        <h1>VNetCore</h1>
-        <p>Network Infrastructure Documentation</p>
-      </div>
-    </div>
-
-    <div class="actions">
-      <div class="menu">
-        <button id="importMenuBtn" class="menu-btn" type="button">Import</button>
-
-        <div class="menu-options">
-          <button id="importJsonBtn" type="button">Import JSON</button>
-          <button id="importCsvBtn" type="button">Import CSV</button>
+        <div>
+          <span class="brand-kicker">Infrastructure workspace</span>
+          <h1>VNetCore</h1>
+          <p>Network Infrastructure Documentation</p>
         </div>
       </div>
 
-      <div class="menu">
-        <button id="exportMenuBtn" class="menu-btn" type="button">Export</button>
+      <div class="actions">
+        <div class="menu">
+          <button
+            id="importMenuBtn"
+            class="menu-btn"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="importMenuOptions"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 19h14" />
+            </svg>
+            Import
+          </button>
 
-        <div class="menu-options">
-          <button id="exportJsonBtn" type="button">Export JSON</button>
-          <button id="exportCsvBtn" type="button">Export CSV</button>
+          <div id="importMenuOptions" class="menu-options" role="menu" hidden>
+            <button
+              id="importJsonBtn"
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+            >
+              Import JSON
+            </button>
+            <button
+              id="importCsvBtn"
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+            >
+              Import CSV
+            </button>
+          </div>
         </div>
+
+        <div class="menu">
+          <button
+            id="exportMenuBtn"
+            class="menu-btn"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            aria-controls="exportMenuOptions"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 15V3m0 0 4 4m-4-4L8 7M5 19h14" />
+            </svg>
+            Export
+          </button>
+
+          <div id="exportMenuOptions" class="menu-options" role="menu" hidden>
+            <button
+              id="exportJsonBtn"
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+            >
+              Export JSON
+            </button>
+            <button
+              id="exportCsvBtn"
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+            >
+              Export CSV
+            </button>
+          </div>
+        </div>
+
+        <button id="printBtn" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 14h10v7H7z"
+            />
+          </svg>
+          Print / PDF
+        </button>
       </div>
+    </header>
 
-      <button id="printBtn" type="button">Print / PDF</button>
-    </div>
-  </header>
+    <section
+      id="backupNotice"
+      class="backup-notice"
+      aria-label="Backup reminder"
+      hidden
+    >
+      <div
+        class="backup-notice-content"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <h2 id="backupNoticeTitle">Your data is stored in this browser</h2>
+        <p id="backupNoticeText">
+          Data stays in this browser. Export backups regularly to keep a copy
+          outside this browser.
+        </p>
+      </div>
+      <div class="backup-notice-actions">
+        <button id="backupNoticeExportBtn" class="secondary-btn" type="button">
+          Export backup
+        </button>
+        <button
+          id="backupNoticeDismissBtn"
+          class="secondary-btn"
+          type="button"
+          aria-label="Dismiss backup reminder"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m6 6 12 12M6 18 18 6" />
+          </svg>
+        </button>
+      </div>
+    </section>
 
-  <input id="fileImportInput" type="file" hidden />
+    <input id="fileImportInput" type="file" hidden />
 
-  <button id="toggleSidebarBtn" class="sidebar-toggle" title="Show / hide sidebar">
-    ☰
-  </button>
+    <button
+      id="toggleSidebarBtn"
+      class="sidebar-toggle"
+      type="button"
+      aria-controls="sidebar"
+      aria-expanded="true"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+      <span>Hide project panel</span>
+    </button>
 
-  <main class="layout">
-    <aside class="sidebar" id="sidebar">
-      <section class="card sidebar-card project-card">
-        <h2>Project Information</h2>
+    <main id="mainContent" class="layout" tabindex="-1">
+      <aside class="sidebar" id="sidebar">
+        <details class="card sidebar-card project-card" open>
+          <summary class="panel-summary">
+            <h2>Project Information</h2>
+          </summary>
+          <div class="project-toolbar">
+            <button
+              id="newBlankProjectBtn"
+              class="danger-small-btn"
+              type="button"
+            >
+              New Project
+            </button>
+          </div>
 
-        <label class="project-label">
-          Project name
-          <input id="projectNameInput" type="text" placeholder="Example: Cuesta Las Piedras" />
-        </label>
+          <label class="project-label">
+            Project name
+            <input
+              id="projectNameInput"
+              type="text"
+              maxlength="120"
+              placeholder="Example: Cuesta Las Piedras"
+            />
+          </label>
+
+          <label class="project-label">
+            Responsible person
+            <input
+              id="projectOwnerInput"
+              type="text"
+              maxlength="120"
+              placeholder="Name or team"
+            />
+          </label>
+
+          <label class="project-label date-field">
+            Review date
+            <span class="date-input-shell">
+              <input id="projectReviewDateInput" type="date" />
+            </span>
+          </label>
+
+          <p
+            id="saveStatus"
+            class="save-status"
+            role="status"
+            aria-live="polite"
+          >
+            Saved locally
+          </p>
+        </details>
+
+        <section class="card sidebar-card">
+          <div class="section-title-row">
+            <div>
+              <span class="section-eyebrow">Inventory</span>
+              <h2>Devices</h2>
+            </div>
+
+            <button
+              id="clearAllBtn"
+              class="danger-small-btn"
+              type="button"
+              title="Delete all devices"
+            >
+              Clear all
+            </button>
+          </div>
+
+          <label class="project-label" for="deviceSearchInput">
+            Search devices or ports
+            <input
+              id="deviceSearchInput"
+              type="search"
+              maxlength="120"
+              placeholder="Name, location, VLAN, IP..."
+            />
+          </label>
+
+          <div id="deviceList" class="device-list" aria-live="polite"></div>
+        </section>
+
+        <details class="card sidebar-card add-device-card" open>
+          <summary class="panel-summary">
+            <h2 id="deviceFormTitle">Add device</h2>
+          </summary>
+
+          <form id="deviceForm" class="form-grid">
+            <label>
+              Model / name
+              <input
+                name="model"
+                type="text"
+                maxlength="120"
+                placeholder="Switch MDF"
+                required
+              />
+            </label>
+
+            <label>
+              Device type
+              <select id="deviceTypeSelect" name="type" required>
+                <option value="Firewall">Firewall</option>
+                <option value="Switch">Switch</option>
+                <option value="Router">Router</option>
+                <option value="Patch Panel">Patch Panel</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+
+            <label id="customDeviceTypeLabel" class="hidden-field">
+              Custom type
+              <input
+                id="customDeviceTypeInput"
+                name="customType"
+                type="text"
+                maxlength="80"
+                placeholder="Specify device type"
+              />
+            </label>
+
+            <label>
+              Port layout
+              <select id="devicePortLayoutSelect" name="portLayout">
+                <option value="alternating">Alternating rows</option>
+                <option value="split">Split into halves</option>
+              </select>
+            </label>
+
+            <label>
+              Location
+              <input
+                name="location"
+                type="text"
+                maxlength="160"
+                placeholder="Network cabinet"
+              />
+            </label>
+
+            <label>
+              WAN ports
+              <input name="wanPorts" type="number" min="0" max="16" value="0" />
+            </label>
+
+            <label>
+              LAN ports
+              <input
+                name="lanPorts"
+                type="number"
+                min="1"
+                max="96"
+                value="24"
+                required
+              />
+            </label>
+
+            <button id="deviceSubmitBtn" type="submit">Add device</button>
+            <button
+              id="cancelDeviceEditBtn"
+              class="secondary-btn hidden-field"
+              type="button"
+            >
+              Cancel editing
+            </button>
+          </form>
+        </details>
+      </aside>
+
+      <section class="workspace">
+        <section class="card project-title-card">
+          <span>Active project</span>
+          <h2 id="projectDisplayName">Unnamed project</h2>
+        </section>
+
+        <p id="portDraftSummary" class="draft-summary" role="status" hidden></p>
+
+        <section class="device-header card">
+          <div>
+            <span id="deviceType" class="tag"></span>
+            <h2 id="deviceName">No device selected</h2>
+            <p id="deviceMeta"></p>
+          </div>
+
+          <div class="legend">
+            <span
+              ><i class="dot active"></i>Active
+              <strong id="countActive">0</strong></span
+            >
+            <span
+              ><i class="dot no-link"></i>No link
+              <strong id="countNoLink">0</strong></span
+            >
+            <span
+              ><i class="dot available"></i>Available
+              <strong id="countAvailable">0</strong></span
+            >
+            <span
+              ><i class="dot unknown-device"></i>Unknown Device
+              <strong id="countUnknownDevice">0</strong></span
+            >
+          </div>
+
+          <div
+            class="device-actions"
+            role="group"
+            aria-label="Selected device actions"
+          >
+            <button id="editDeviceBtn" class="secondary-btn" type="button">
+              Edit
+            </button>
+            <button id="duplicateDeviceBtn" class="secondary-btn" type="button">
+              Duplicate
+            </button>
+            <button
+              id="moveDeviceUpBtn"
+              class="secondary-btn"
+              type="button"
+              aria-label="Move selected device up"
+            >
+              Up
+            </button>
+            <button
+              id="moveDeviceDownBtn"
+              class="secondary-btn"
+              type="button"
+              aria-label="Move selected device down"
+            >
+              Down
+            </button>
+          </div>
+        </section>
+
+        <section class="card ports-card">
+          <div class="content-heading">
+            <div>
+              <span class="section-eyebrow">Interface map</span>
+              <h2>Ports</h2>
+            </div>
+            <p>Select a port to review or update its connection.</p>
+          </div>
+          <p id="portScrollHint" class="scroll-hint" hidden>
+            More ports are off screen. Scroll horizontally, or focus the map and
+            use the arrow keys.
+          </p>
+          <section
+            id="portGrid"
+            class="port-grid"
+            aria-label="Device ports"
+            aria-describedby="portScrollHint"
+            tabindex="0"
+          ></section>
+        </section>
+
+        <section class="card details">
+          <div class="content-heading">
+            <div>
+              <span class="section-eyebrow">Selected interface</span>
+              <h2>Port details</h2>
+            </div>
+            <p>Use Save port to store changes in this browser.</p>
+          </div>
+
+          <p id="portEditStatus" class="port-edit-status" role="status"></p>
+
+          <form id="portForm" class="details-grid">
+            <label>
+              Port
+              <input
+                name="number"
+                type="text"
+                readonly
+                class="readonly-input"
+              />
+            </label>
+
+            <label>
+              Status
+              <select name="status">
+                <option value="available">Available</option>
+                <option value="active">Active</option>
+                <option value="no-link">No link</option>
+                <option value="unknown-device">Unknown Device</option>
+              </select>
+            </label>
+
+            <label>
+              Type
+              <input
+                name="connectionType"
+                type="text"
+                maxlength="120"
+                placeholder="PC, AP, Camera, Uplink, ISP, Printer"
+              />
+            </label>
+
+            <label>
+              Connected to
+              <input
+                name="connectedTo"
+                type="text"
+                maxlength="160"
+                placeholder="Example: AP Lobby, Admin PC, IDF Switch"
+              />
+            </label>
+
+            <label>
+              VLAN
+              <input
+                name="vlan"
+                type="text"
+                maxlength="80"
+                placeholder="Example: 10 / Admin"
+              />
+            </label>
+
+            <label>
+              IP / MAC
+              <input
+                name="address"
+                type="text"
+                maxlength="160"
+                placeholder="IP or MAC if applicable"
+              />
+            </label>
+
+            <label>
+              Notes
+              <textarea
+                name="notes"
+                maxlength="2000"
+                placeholder="Notes, evidence, date, pending tasks..."
+              ></textarea>
+            </label>
+
+            <div class="form-actions">
+              <button type="submit">Save port</button>
+              <button
+                id="discardPortDraftBtn"
+                class="secondary-btn"
+                type="button"
+                hidden
+              >
+                Discard changes
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card other-devices-card">
+          <div class="content-heading">
+            <div>
+              <span class="section-eyebrow">Project overview</span>
+              <h2>All devices</h2>
+            </div>
+            <p>Quick status summary across the current inventory.</p>
+          </div>
+          <div id="projectDevicesSummary" class="project-devices-summary"></div>
+        </section>
       </section>
+    </main>
 
-      <section class="card sidebar-card">
-        <div class="section-title-row">
-          <h2>Devices</h2>
+    <section id="printReport" class="print-report"></section>
 
-          <button id="clearAllBtn" class="danger-small-btn" type="button" title="Delete all devices">
-            Clear all
+    <dialog id="importDialog" class="modal" aria-labelledby="importDialogTitle">
+      <form method="dialog" class="modal-content">
+        <h2 id="importDialogTitle">Review import</h2>
+        <p id="importSummary"></p>
+        <p class="privacy-note">
+          Importing replaces the active project. A recovery backup will be kept
+          locally.
+        </p>
+        <div class="modal-actions">
+          <button type="submit" value="cancel" class="secondary-btn">
+            Cancel
+          </button>
+          <button id="confirmImportBtn" type="submit" value="default">
+            Replace project
           </button>
         </div>
+      </form>
+    </dialog>
 
-        <div id="deviceList" class="device-list"></div>
-      </section>
-
-      <section class="card sidebar-card add-device-card">
-        <h2>Add device</h2>
-
-        <form id="deviceForm" class="form-grid">
-          <input name="model" placeholder="Model / Name: Switch MDF" required />
-
-          <select id="deviceTypeSelect" name="type" required>
-            <option value="Firewall">Firewall</option>
-            <option value="Switch">Switch</option>
-            <option value="Router">Router</option>
-            <option value="Patch Panel">Patch Panel</option>
-            <option value="Other">Other</option>
-          </select>
-
-          <input
-            id="customDeviceTypeInput"
-            name="customType"
-            class="hidden-field"
-            placeholder="Specify device type"
-          />
-
-          <input name="location" placeholder="Location / Network cabinet" />
-
-          <label>
-            WAN ports
-            <input name="wanPorts" type="number" min="0" max="16" value="0" />
-          </label>
-
-          <label>
-            LAN ports
-            <input name="lanPorts" type="number" min="1" max="96" value="24" required />
-          </label>
-
-          <button type="submit">Add device</button>
-        </form>
-      </section>
-    </aside>
-
-    <section class="workspace">
-      <section class="card project-title-card">
-        <span>Active documentation</span>
-        <h2 id="projectDisplayName">Unnamed project</h2>
-      </section>
-
-      <section class="device-header card">
-        <div>
-          <span id="deviceType" class="tag"></span>
-          <h2 id="deviceName"></h2>
-          <p id="deviceMeta"></p>
+    <dialog
+      id="confirmDialog"
+      class="modal"
+      aria-labelledby="confirmDialogTitle"
+    >
+      <form method="dialog" class="modal-content">
+        <h2 id="confirmDialogTitle">Confirm action</h2>
+        <p id="confirmDialogMessage"></p>
+        <div class="modal-actions">
+          <button type="submit" value="cancel" class="secondary-btn">
+            Cancel
+          </button>
+          <button id="confirmDialogAction" type="submit" value="default">
+            Confirm
+          </button>
         </div>
+      </form>
+    </dialog>
 
-        <div class="legend">
-          <span><i class="dot active"></i>Active <strong id="countActive">0</strong></span>
-          <span><i class="dot no-link"></i>No link <strong id="countNoLink">0</strong></span>
-          <span><i class="dot available"></i>Available <strong id="countAvailable">0</strong></span>
-          <span><i class="dot unknown-device"></i>Unknown Device <strong id="countUnknownDevice">0</strong></span>
-        </div>
-      </section>
-
-      <section class="card">
-        <div id="portGrid" class="port-grid"></div>
-      </section>
-
-      <section class="card details">
-        <h2>Port Details</h2>
-
-        <form id="portForm" class="details-grid">
-          <label>
-            Port
-            <input name="number" readonly class="readonly-input" />
-          </label>
-
-          <label>
-            Status
-            <select name="status">
-              <option value="available">Available</option>
-              <option value="active">Active</option>
-              <option value="no-link">No link</option>
-              <option value="unknown-device">Unknown Device</option>
-            </select>
-          </label>
-
-          <label>
-            Type
-            <input name="connectionType" placeholder="PC, AP, Camera, Uplink, ISP, Printer" />
-          </label>
-
-          <label>
-            Connected to
-            <input name="connectedTo" placeholder="Example: AP Lobby, Admin PC, IDF Switch" />
-          </label>
-
-          <label>
-            VLAN
-            <input name="vlan" placeholder="Example: 10 / Admin" />
-          </label>
-
-          <label>
-            IP / MAC
-            <input name="address" placeholder="IP or MAC if applicable" />
-          </label>
-
-          <label>
-            Notes
-            <textarea name="notes" placeholder="Notes, evidence, date, pending tasks..."></textarea>
-          </label>
-
-          <button type="submit">Save port</button>
-        </form>
-      </section>
-
-      <section class="card other-devices-card">
-        <h2>Other devices in this project</h2>
-        <div id="projectDevicesSummary" class="project-devices-summary"></div>
-      </section>
-    </section>
-  </main>
-
-  <section id="printReport" class="print-report"></section>
-
-  <footer class="footer">
-    <div class="footer-content">
-      <div>
-        <strong>VNetCore</strong>
-        <span>Network Infrastructure Documentation</span>
-      </div>
-
-      <p>
-        © <span id="currentYear">2026</span> Chaniel J. López Soto. All rights reserved.
-      </p>
+    <div
+      id="notification"
+      class="notification"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <span id="notificationText"></span>
+      <button
+        id="downloadRecoveryBtn"
+        class="secondary-btn"
+        type="button"
+        hidden
+      >
+        Download recovery
+      </button>
+      <button id="restoreBackupBtn" class="secondary-btn" type="button" hidden>
+        Restore backup
+      </button>
+      <button id="undoBtn" class="secondary-btn" type="button" hidden>
+        Undo
+      </button>
     </div>
-  </footer>
 
-  <script src="app.js"></script>
-</body>
+    <footer class="footer">
+      <div class="footer-content">
+        <div class="footer-identity">
+          <strong>VNetCore</strong>
+             <p>
+          © <span id="currentYear">2026</span> Chaniel J. López Soto. All rights
+          reserved.
+        </p>
+        </div>
+
+     
+        <div class="footer-credit">
+          <img
+            src="img/cjota-logo-80.webp"
+            srcset="img/cjota-logo-80.webp 2x, img/cjota-logo-120.webp 3x"
+            alt="Cjota Solutions"
+            width="40"
+            height="40"
+            loading="lazy"
+            decoding="async"
+          />
+          <span>Powered by CJota Solutions</span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="core.js"></script>
+    <script src="app.js"></script>
+  </body>
 </html>

@@ -1,1025 +1,1441 @@
-const STORAGE_KEY = 'vnetcore.project.v7';
+"use strict";
 
-const STATUS_LABELS = {
-  active: 'Active',
-  'no-link': 'No link',
-  available: 'Available',
-  'unknown-device': 'Unknown Device'
-};
+const {
+  SCHEMA_VERSION,
+  LIMITS,
+  STATUS_LABELS,
+  createId,
+  normalizeStatus,
+  normalizeProject,
+  cloneProject,
+  projectToCsv,
+  csvToProject,
+} = window.VNetCoreCore;
 
-const STATUS_MIGRATION = {
-  connected: 'active',
-  uplink: 'active',
-  empty: 'available',
-  issue: 'unknown-device',
-  Active: 'active',
-  'No link': 'no-link',
-  Available: 'available',
-  'Unknown Device': 'unknown-device'
-};
-
-const CSV_HEADERS = [
-  'projectName',
-  'deviceName',
-  'deviceType',
-  'deviceLocation',
-  'portKind',
-  'portNumber',
-  'status',
-  'connectionType',
-  'connectedTo',
-  'vlan',
-  'address',
-  'notes'
+const STORAGE_KEY = `vnetcore.project.v${SCHEMA_VERSION}`;
+const LEGACY_STORAGE_KEYS = ["vnetcore.project.v8", "vnetcore.project.v7"];
+const BACKUP_KEY = `${STORAGE_KEY}.backup`;
+const BACKUP_NOTICE_KEY = "vnetcore.backup-reminder.v1";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const EMPTY_PROJECT = normalizeProject({
+  projectName: "Unnamed project",
+  devices: [],
+});
+const undoStack = [];
+const portDrafts = new Map();
+const PORT_EDIT_FIELDS = [
+  "status",
+  "connectionType",
+  "connectedTo",
+  "vlan",
+  "address",
+  "notes",
 ];
 
-const emptyProject = {
-  projectName: 'Unnamed project',
-  devices: []
-};
-
-let project = loadProject();
-let devices = project.devices;
-let selectedDeviceId = devices[0]?.id || null;
-let selectedPortNumber = null;
-let selectedPortKind = null;
+let loadFailure = null;
+let pendingImport = null;
 let importMode = null;
-let shouldWarnBeforeLeaving = true;
+let editingDeviceId = null;
+let selectedDeviceId = null;
+let selectedPortId = null;
+let saveTimer = null;
+let notificationTimer = null;
+let hasUnsavedChanges = false;
+let backupNoticeState = loadBackupNoticeState();
+let showBackupIntroduction = !backupNoticeState.infoShown;
 
-function makeMixedPorts(wanCount, lanCount) {
-  const wanPorts = Array.from({ length: wanCount }, (_, index) => ({
-    number: index + 1,
-    status: 'no-link',
-    connectedTo: 'Internet Provider',
-    connectionType: 'WAN',
-    vlan: 'WAN',
-    address: '',
-    notes: 'Default WAN port.',
-    portKind: 'WAN'
-  }));
-
-  const lanPorts = Array.from({ length: lanCount }, (_, index) => ({
-    number: index + 1,
-    status: 'available',
-    connectedTo: '',
-    connectionType: '',
-    vlan: '',
-    address: '',
-    notes: '',
-    portKind: 'LAN'
-  }));
-
-  return [...wanPorts, ...lanPorts];
-}
-
-function normalizeStatus(status) {
-  const value = String(status || '').trim();
-
-  if (STATUS_LABELS[value]) {
-    return value;
-  }
-
-  return STATUS_MIGRATION[value] || 'available';
-}
+const loaded = loadProject();
+let project = loaded.project;
+let devices = project.devices;
+selectedDeviceId = devices[0]?.id || null;
 
 function loadProject() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-
-    if (!saved) {
-      return cloneProject(emptyProject);
+  const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
+  for (const key of keys) {
+    let saved;
+    try {
+      saved = localStorage.getItem(key);
+    } catch (error) {
+      loadFailure = { error, raw: "", key };
+      return { project: cloneProject(EMPTY_PROJECT), migrated: false };
     }
-
-    const parsed = JSON.parse(saved);
-
-    if (Array.isArray(parsed)) {
+    if (!saved) continue;
+    try {
       return {
-        projectName: 'Unnamed project',
-        devices: normalizeDevices(parsed)
+        project: normalizeProject(JSON.parse(saved)),
+        migrated: key !== STORAGE_KEY,
       };
+    } catch (error) {
+      loadFailure = { error, raw: saved, key };
+      return { project: cloneProject(EMPTY_PROJECT), migrated: false };
     }
+  }
+  return { project: cloneProject(EMPTY_PROJECT), migrated: false };
+}
 
-    return {
-      projectName: parsed.projectName || 'Unnamed project',
-      devices: normalizeDevices(parsed.devices || [])
-    };
-  } catch {
-    return cloneProject(emptyProject);
+function setSaveStatus(message, state = "") {
+  const status = document.querySelector("#saveStatus");
+  status.textContent = message;
+  status.className = `save-status ${state}`.trim();
+}
+
+function saveProject(options = {}) {
+  const { keepBackup = true } = options;
+  project.devices = devices;
+  project.updatedAt = new Date().toISOString();
+  const serialized = JSON.stringify(project);
+  try {
+    const previous = localStorage.getItem(STORAGE_KEY);
+    if (keepBackup && previous && previous !== serialized) {
+      localStorage.setItem(BACKUP_KEY, previous);
+    }
+    localStorage.setItem(STORAGE_KEY, serialized);
+    hasUnsavedChanges = false;
+    setSaveStatus(
+      `Saved locally at ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+      "saved",
+    );
+    return true;
+  } catch (error) {
+    hasUnsavedChanges = true;
+    setSaveStatus("Not saved. Export a recovery copy.", "error");
+    showNotification(`Local save failed: ${error.message}`, {
+      recovery: true,
+      persistent: true,
+    });
+    return false;
   }
 }
 
-function cloneProject(sourceProject) {
+function scheduleSave() {
+  hasUnsavedChanges = true;
+  setSaveStatus("Saving...", "saving");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveProject(), 350);
+}
+
+function snapshot() {
   return {
-    projectName: sourceProject.projectName,
-    devices: normalizeDevices(sourceProject.devices)
+    project: cloneProject({ ...project, devices }),
+    selectedDeviceId,
+    selectedPortId,
   };
 }
 
-function normalizeDevices(deviceList) {
-  return deviceList.map(device => {
-    const ports = Array.isArray(device.ports) ? device.ports : [];
+function rememberForUndo(previous, message) {
+  undoStack.push({ ...previous, message });
+  if (undoStack.length > 10) undoStack.shift();
+}
 
-    return {
-      id: device.id || crypto.randomUUID(),
-      name: device.name || device.model || 'Unnamed device',
-      type: device.type || 'Other',
-      location: device.location || '',
-      ports: ports.map((port, index) => {
-        const isWan =
-          port.portKind === 'WAN' ||
-          port.connectionType === 'WAN' ||
-          port.vlan === 'WAN';
+function commitChange(previous, message) {
+  rememberForUndo(previous, message);
+  const saved = saveProject();
+  render();
+  if (saved) showNotification(message, { undo: true });
+}
 
-        return {
-          number: Number(port.number || index + 1),
-          status: normalizeStatus(port.status),
-          connectedTo: port.connectedTo || '',
-          connectionType: port.connectionType || '',
-          vlan: port.vlan || '',
-          address: port.address || '',
-          notes: port.notes || '',
-          portKind: port.portKind || (isWan ? 'WAN' : 'LAN')
-        };
-      })
-    };
+function undoLastChange() {
+  const previous = undoStack.pop();
+  if (!previous) return;
+  project = normalizeProject(previous.project);
+  devices = project.devices;
+  selectedDeviceId = devices.some(
+    (device) => device.id === previous.selectedDeviceId,
+  )
+    ? previous.selectedDeviceId
+    : devices[0]?.id || null;
+  selectedPortId = previous.selectedPortId;
+  saveProject();
+  render();
+  showNotification(`Undone: ${previous.message}`);
+}
+
+function showNotification(message, options = {}) {
+  const box = document.querySelector("#notification");
+  const text = document.querySelector("#notificationText");
+  const undo = document.querySelector("#undoBtn");
+  const recovery = document.querySelector("#downloadRecoveryBtn");
+  const restoreBackup = document.querySelector("#restoreBackupBtn");
+  clearTimeout(notificationTimer);
+  text.textContent = message;
+  undo.hidden = !options.undo;
+  recovery.hidden = !options.recovery;
+  restoreBackup.hidden = !options.backup;
+  box.hidden = false;
+  if (!options.persistent) {
+    notificationTimer = setTimeout(() => {
+      box.hidden = true;
+    }, 6500);
+  }
+}
+
+function loadBackupNoticeState() {
+  const now = Date.now();
+  let stored;
+  try {
+    stored = JSON.parse(localStorage.getItem(BACKUP_NOTICE_KEY));
+  } catch {
+    // The reminder must not prevent access when browser storage is unavailable.
+  }
+  const validTime = (value) =>
+    Number.isFinite(value) && value > 0 && value <= now;
+  return {
+    firstSeenAt: validTime(stored?.firstSeenAt) ? stored.firstSeenAt : now,
+    lastExportAt: validTime(stored?.lastExportAt) ? stored.lastExportAt : null,
+    infoShown: stored?.infoShown === true,
+    dismissedLevel: ["reminder", "overdue"].includes(stored?.dismissedLevel)
+      ? stored.dismissedLevel
+      : null,
+    dismissedAt: validTime(stored?.dismissedAt) ? stored.dismissedAt : null,
+  };
+}
+
+function saveBackupNoticeState() {
+  try {
+    localStorage.setItem(BACKUP_NOTICE_KEY, JSON.stringify(backupNoticeState));
+  } catch {
+    // Keep the reminder functional for this session even without persistence.
+  }
+}
+
+function renderBackupNotice() {
+  const notice = document.querySelector("#backupNotice");
+  const elapsed =
+    Date.now() -
+    (backupNoticeState.lastExportAt || backupNoticeState.firstSeenAt);
+  const days = Math.floor(elapsed / DAY_MS);
+  const level =
+    days >= 30
+      ? "overdue"
+      : days >= 7
+        ? "reminder"
+        : showBackupIntroduction
+          ? "info"
+          : null;
+  const snoozed =
+    level === backupNoticeState.dismissedLevel &&
+    backupNoticeState.dismissedAt !== null &&
+    Date.now() - backupNoticeState.dismissedAt < DAY_MS;
+  if (!level || snoozed) {
+    hideBackupNotice();
+    return;
+  }
+  const titles = {
+    info: "Your data is stored in this browser",
+    reminder: "Time for a backup",
+    overdue: "Backup overdue — export your data",
+  };
+  const sinceExport = backupNoticeState.lastExportAt
+    ? `It has been ${days} days since your last export.`
+    : `You have not exported a backup in ${days} days since your first visit.`;
+  const messages = {
+    info: "Data stays in this browser. Export backups regularly to keep a copy outside this browser.",
+    reminder: `${sinceExport} Export a backup when you have a moment.`,
+    overdue: `${sinceExport} Your data is only stored in this browser and may be lost if browser data is cleared. Export a backup now.`,
+  };
+  notice.dataset.level = level;
+  const title = document.querySelector("#backupNoticeTitle");
+  const text = document.querySelector("#backupNoticeText");
+  if (title.textContent !== titles[level]) title.textContent = titles[level];
+  if (text.textContent !== messages[level]) text.textContent = messages[level];
+  notice.hidden = false;
+}
+
+function hideBackupNotice() {
+  const notice = document.querySelector("#backupNotice");
+  if (notice.contains(document.activeElement)) {
+    document.querySelector("#exportMenuBtn").focus({ preventScroll: true });
+  }
+  notice.hidden = true;
+}
+
+function recordBackupExport() {
+  backupNoticeState.lastExportAt = Date.now();
+  backupNoticeState.dismissedLevel = null;
+  backupNoticeState.dismissedAt = null;
+  showBackupIntroduction = false;
+  saveBackupNoticeState();
+  renderBackupNotice();
+}
+
+function readBackupProject() {
+  try {
+    const backup = localStorage.getItem(BACKUP_KEY);
+    return backup ? normalizeProject(JSON.parse(backup)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function requestConfirmation(title, message, actionLabel) {
+  const dialog = document.querySelector("#confirmDialog");
+  document.querySelector("#confirmDialogTitle").textContent = title;
+  document.querySelector("#confirmDialogMessage").textContent = message;
+  document.querySelector("#confirmDialogAction").textContent = actionLabel;
+  dialog.showModal();
+  return new Promise((resolve) => {
+    dialog.addEventListener(
+      "close",
+      () => resolve(dialog.returnValue === "default"),
+      { once: true },
+    );
   });
 }
 
-function save() {
-  project.devices = devices;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+function makePorts(kind, count, existing = []) {
+  const retained = existing
+    .filter((port) => port.portKind === kind)
+    .slice(0, count);
+  for (let index = retained.length; index < count; index++) {
+    retained.push({
+      id: createId(),
+      number: index + 1,
+      status: kind === "WAN" ? "no-link" : "available",
+      connectedTo: kind === "WAN" ? "Internet Provider" : "",
+      connectionType: kind === "WAN" ? "WAN" : "",
+      vlan: kind === "WAN" ? "WAN" : "",
+      address: "",
+      notes: kind === "WAN" ? "Default WAN port." : "",
+      portKind: kind,
+    });
+  }
+  return retained.map((port, index) => ({ ...port, number: index + 1 }));
 }
 
 function currentDevice() {
-  return devices.find(device => device.id === selectedDeviceId) || devices[0] || null;
+  return (
+    devices.find((device) => device.id === selectedDeviceId) ||
+    devices[0] ||
+    null
+  );
 }
 
 function currentPort() {
-  const device = currentDevice();
+  return (
+    currentDevice()?.ports.find((port) => port.id === selectedPortId) || null
+  );
+}
 
-  if (!device || selectedPortNumber === null || selectedPortKind === null) {
-    return null;
+function portDraftKey(deviceId, portId) {
+  return JSON.stringify([deviceId, portId]);
+}
+
+function updatePortEditStatus() {
+  const port = currentPort();
+  const dirty =
+    port && portDrafts.has(portDraftKey(currentDevice().id, port.id));
+  const status = document.querySelector("#portEditStatus");
+  const message = dirty
+    ? "Unsaved changes. Your draft is kept while switching ports. Use Save port before leaving this page."
+    : "No pending changes for this port.";
+  if (status.textContent !== message) status.textContent = message;
+  status.classList.toggle("is-dirty", Boolean(dirty));
+  document.querySelector("#discardPortDraftBtn").hidden = !dirty;
+  const summary = document.querySelector("#portDraftSummary");
+  summary.hidden = portDrafts.size === 0;
+  const count = portDrafts.size;
+  const summaryText = `${count} port ${count === 1 ? "has" : "have"} unsaved changes. Select each port to save its draft before leaving or exporting.`;
+  if (summary.textContent !== summaryText) summary.textContent = summaryText;
+}
+
+function rememberPortDraft() {
+  const port = currentPort();
+  if (!port) return;
+  const form = document.querySelector("#portForm");
+  const draft = Object.fromEntries(
+    PORT_EDIT_FIELDS.map((field) => [field, form.elements[field].value]),
+  );
+  const key = portDraftKey(currentDevice().id, port.id);
+  if (
+    PORT_EDIT_FIELDS.some((field) => draft[field] !== String(port[field] ?? ""))
+  ) {
+    portDrafts.set(key, draft);
+  } else {
+    portDrafts.delete(key);
   }
-
-  return device.ports.find(port => {
-    return port.number === selectedPortNumber && port.portKind === selectedPortKind;
-  }) || null;
+  updatePortEditStatus();
 }
 
-function getLanCount(device) {
-  if (!device) return 0;
-  return device.ports.filter(port => port.portKind !== 'WAN').length;
+function captureListFocus(container) {
+  return container.contains(document.activeElement)
+    ? document.activeElement.dataset.focusKey
+    : null;
 }
 
-function getWanCount(device) {
-  if (!device) return 0;
-  return device.ports.filter(port => port.portKind === 'WAN').length;
+function restoreListFocus(container, key) {
+  if (!key) return;
+  const replacement = Array.from(
+    container.querySelectorAll("[data-focus-key]"),
+  ).find((element) => element.dataset.focusKey === key);
+  const fallback = container.querySelector(".is-selected, button");
+  (replacement || fallback)?.focus({ preventScroll: true });
 }
 
-function createTrashIcon() {
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+function setSidebarExpanded(expanded) {
+  document
+    .querySelector("#sidebar")
+    .classList.toggle("is-collapsed", !expanded);
+  document
+    .querySelector(".layout")
+    .classList.toggle("sidebar-collapsed", !expanded);
+  const button = document.querySelector("#toggleSidebarBtn");
+  button.setAttribute("aria-expanded", String(expanded));
+  button.querySelector("span").textContent = expanded
+    ? "Hide project panel"
+    : "Show project panel";
+}
 
-  icon.setAttribute('viewBox', '0 0 24 24');
-  icon.setAttribute('fill', 'none');
-  icon.setAttribute('stroke', 'currentColor');
-  icon.setAttribute('stroke-width', '2');
-  icon.setAttribute('stroke-linecap', 'round');
-  icon.setAttribute('stroke-linejoin', 'round');
+function beginDeviceCreate() {
+  setSidebarExpanded(true);
+  document.querySelector(".add-device-card").open = true;
+  cancelDeviceEdit();
+  document.querySelector("#deviceForm").elements.model.focus();
+}
 
-  icon.innerHTML = `
-    <path d="M3 6h18"></path>
-    <path d="M8 6V4h8v2"></path>
-    <path d="M19 6l-1 14H6L5 6"></path>
-    <path d="M10 11v6"></path>
-    <path d="M14 11v6"></path>
-  `;
+function updatePortScrollHint() {
+  const grid = document.querySelector("#portGrid");
+  document.querySelector("#portScrollHint").hidden =
+    grid.scrollWidth <= grid.clientWidth + 1;
+}
 
-  return icon;
+function getKindCount(device, kind) {
+  return device
+    ? device.ports.filter((port) => port.portKind === kind).length
+    : 0;
 }
 
 function getDeviceCounts(device) {
-  const counts = {
-    active: 0,
-    'no-link': 0,
-    available: 0,
-    'unknown-device': 0
-  };
-
-  if (!device) {
-    return counts;
-  }
-
-  device.ports.forEach(port => {
-    const status = normalizeStatus(port.status);
-
-    if (counts[status] !== undefined) {
-      counts[status]++;
-    }
+  const counts = { active: 0, "no-link": 0, available: 0, "unknown-device": 0 };
+  device?.ports.forEach((port) => {
+    counts[normalizeStatus(port.status)]++;
   });
-
   return counts;
 }
 
-function renderProjectName() {
-  const input = document.querySelector('#projectNameInput');
-  const display = document.querySelector('#projectDisplayName');
+function deviceMatchesSearch(device, search) {
+  if (!search) return true;
+  const fields = [device.name, device.type, device.location];
+  device.ports.forEach((port) =>
+    fields.push(
+      port.portKind,
+      port.number,
+      port.status,
+      port.connectionType,
+      port.connectedTo,
+      port.vlan,
+      port.address,
+      port.notes,
+    ),
+  );
+  return fields.some((value) =>
+    String(value ?? "")
+      .toLowerCase()
+      .includes(search),
+  );
+}
 
-  input.value = project.projectName;
-  display.textContent = project.projectName || 'Unnamed project';
+function createTrashIcon() {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("fill", "none");
+  icon.setAttribute("stroke", "currentColor");
+  icon.setAttribute("stroke-width", "2");
+  icon.setAttribute("aria-hidden", "true");
+  const paths = [
+    "M3 6h18",
+    "M8 6V4h8v2",
+    "M19 6l-1 14H6L5 6",
+    "M10 11v6",
+    "M14 11v6",
+  ];
+  paths.forEach((data) => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", data);
+    icon.appendChild(path);
+  });
+  return icon;
+}
+
+function renderProjectMeta() {
+  const nameInput = document.querySelector("#projectNameInput");
+  const ownerInput = document.querySelector("#projectOwnerInput");
+  const reviewInput = document.querySelector("#projectReviewDateInput");
+  if (document.activeElement !== nameInput)
+    nameInput.value = project.projectName;
+  if (document.activeElement !== ownerInput)
+    ownerInput.value = project.owner || "";
+  if (document.activeElement !== reviewInput)
+    reviewInput.value = project.reviewDate || "";
+  document.querySelector("#projectDisplayName").textContent =
+    project.projectName || "Unnamed project";
 }
 
 function renderDevices() {
-  const list = document.querySelector('#deviceList');
-  list.innerHTML = '';
-
-  if (devices.length === 0) {
-    const emptyMessage = document.createElement('p');
-
-    emptyMessage.textContent = 'No devices have been added.';
-    emptyMessage.style.textAlign = 'center';
-    emptyMessage.style.fontSize = '13px';
-    emptyMessage.style.padding = '10px';
-    emptyMessage.style.color = 'var(--text-muted)';
-
-    list.appendChild(emptyMessage);
+  const list = document.querySelector("#deviceList");
+  const focusKey = captureListFocus(list);
+  const search = document
+    .querySelector("#deviceSearchInput")
+    .value.trim()
+    .toLowerCase();
+  const filtered = devices.filter((device) =>
+    deviceMatchesSearch(device, search),
+  );
+  list.replaceChildren();
+  if (filtered.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty-message";
+    empty.textContent = devices.length
+      ? "No devices match the search."
+      : "No devices have been added.";
+    list.appendChild(empty);
     return;
   }
-
-  devices.forEach(device => {
-    const container = document.createElement('div');
-    container.className = 'device-item-container';
-
-    const btn = document.createElement('button');
-    btn.className = `device-item ${device.id === selectedDeviceId ? 'active' : ''}`;
-
-    const strong = document.createElement('strong');
-    strong.textContent = device.name;
-
-    const br = document.createElement('br');
-
-    const small = document.createElement('small');
-    small.textContent = `${device.type} · ${device.location || 'No location'} · LAN: ${getLanCount(device)} · WAN: ${getWanCount(device)}`;
-
-    btn.appendChild(strong);
-    btn.appendChild(br);
-    btn.appendChild(small);
-
-    btn.onclick = () => {
+  filtered.forEach((device) => {
+    const container = document.createElement("div");
+    container.className = "device-item-container";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.focusKey = JSON.stringify(["device", device.id]);
+    button.className = `device-item ${device.id === selectedDeviceId ? "is-selected" : ""}`;
+    button.setAttribute("aria-pressed", String(device.id === selectedDeviceId));
+    const name = document.createElement("strong");
+    name.textContent = device.name;
+    const meta = document.createElement("small");
+    meta.textContent = `${device.type} | ${device.location || "No location"} | LAN: ${getKindCount(device, "LAN")} | WAN: ${getKindCount(device, "WAN")}`;
+    button.append(name, meta);
+    button.addEventListener("click", () => {
       selectedDeviceId = device.id;
-      selectedPortNumber = null;
-      selectedPortKind = null;
+      selectedPortId = null;
       render();
-    };
-
-    const delBtn = document.createElement('button');
-    delBtn.className = 'delete-btn';
-    delBtn.title = `Delete ${device.name}`;
-    delBtn.appendChild(createTrashIcon());
-
-    delBtn.onclick = event => {
-      event.stopPropagation();
-      deleteDevice(device.id, device.name);
-    };
-
-    container.appendChild(btn);
-    container.appendChild(delBtn);
+    });
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.dataset.focusKey = JSON.stringify(["delete", device.id]);
+    deleteButton.className = "delete-btn";
+    deleteButton.setAttribute("aria-label", `Delete ${device.name}`);
+    deleteButton.appendChild(createTrashIcon());
+    deleteButton.addEventListener("click", () => deleteDevice(device));
+    container.append(button, deleteButton);
     list.appendChild(container);
   });
+  restoreListFocus(list, focusKey);
 }
 
-function deleteDevice(id, name) {
-  const confirmed = confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`);
-
-  if (!confirmed) {
-    return;
-  }
-
-  devices = devices.filter(device => device.id !== id);
-
-  if (selectedDeviceId === id) {
-    selectedDeviceId = devices[0]?.id || null;
-    selectedPortNumber = null;
-    selectedPortKind = null;
-  }
-
-  render();
+async function deleteDevice(device) {
+  const confirmed = await requestConfirmation(
+    "Delete device",
+    `Delete "${device.name}"? You can undo this action until another ten changes are made.`,
+    "Delete device",
+  );
+  if (!confirmed) return;
+  const previous = snapshot();
+  devices = devices.filter((item) => item.id !== device.id);
+  if (selectedDeviceId === device.id) selectedDeviceId = devices[0]?.id || null;
+  selectedPortId = null;
+  commitChange(previous, `Deleted ${device.name}`);
 }
 
-function clearAllDevices() {
-  if (devices.length === 0) {
-    alert('There are no devices to delete.');
+async function clearAllDevices() {
+  if (!devices.length) {
+    showNotification("There are no devices to delete.");
     return;
   }
-
-  const confirmed = confirm('Are you sure you want to delete all devices? This action cannot be undone.');
-
-  if (!confirmed) {
-    return;
-  }
-
+  const confirmed = await requestConfirmation(
+    "Delete all devices",
+    "Delete every device in this project?",
+    "Delete all",
+  );
+  if (!confirmed) return;
+  const previous = snapshot();
   devices = [];
   selectedDeviceId = null;
-  selectedPortNumber = null;
-  selectedPortKind = null;
-  render();
+  selectedPortId = null;
+  commitChange(previous, "Deleted all devices");
+}
+
+async function startBlankProject() {
+  const confirmed = await requestConfirmation(
+    "Start a blank project",
+    "Replace the current project with a blank one? You can undo this action or restore the local backup.",
+    "Start blank project",
+  );
+  if (!confirmed) return;
+  const previous = snapshot();
+  project = cloneProject(EMPTY_PROJECT);
+  devices = project.devices;
+  selectedDeviceId = null;
+  selectedPortId = null;
+  pendingImport = null;
+  portDrafts.clear();
+  document.querySelector("#deviceSearchInput").value = "";
+  cancelDeviceEdit();
+  commitChange(previous, "Started a blank project");
+  setSidebarExpanded(true);
+  document.querySelector(".project-card").open = true;
+  document.querySelector("#projectNameInput").focus();
 }
 
 function renderHeader() {
   const device = currentDevice();
-  const header = document.querySelector('.device-header');
-
-  if (!device) {
-    header.style.display = 'none';
-    updateLegendCounts(null);
-    return;
-  }
-
-  header.style.display = 'flex';
-
-  document.querySelector('#deviceType').textContent = device.type;
-  document.querySelector('#deviceName').textContent = device.name;
-  document.querySelector('#deviceMeta').textContent = `${device.location || 'No location'} · LAN: ${getLanCount(device)} · WAN: ${getWanCount(device)}`;
-
+  const header = document.querySelector(".device-header");
+  header.hidden = !device;
+  if (!device) return updateLegendCounts(null);
+  document.querySelector("#deviceType").textContent = device.type;
+  document.querySelector("#deviceName").textContent = device.name;
+  document.querySelector("#deviceMeta").textContent =
+    `${device.location || "No location"} | LAN: ${getKindCount(device, "LAN")} | WAN: ${getKindCount(device, "WAN")}`;
+  const index = devices.findIndex((item) => item.id === device.id);
+  document.querySelector("#moveDeviceUpBtn").disabled = index <= 0;
+  document.querySelector("#moveDeviceDownBtn").disabled =
+    index < 0 || index === devices.length - 1;
   updateLegendCounts(device);
 }
 
 function updateLegendCounts(device) {
   const counts = getDeviceCounts(device);
-
-  document.querySelector('#countActive').textContent = counts.active;
-  document.querySelector('#countNoLink').textContent = counts['no-link'];
-  document.querySelector('#countAvailable').textContent = counts.available;
-  document.querySelector('#countUnknownDevice').textContent = counts['unknown-device'];
+  document.querySelector("#countActive").textContent = counts.active;
+  document.querySelector("#countNoLink").textContent = counts["no-link"];
+  document.querySelector("#countAvailable").textContent = counts.available;
+  document.querySelector("#countUnknownDevice").textContent =
+    counts["unknown-device"];
 }
 
-function createPortElement(port, isSelected = false) {
+function createPortButton(port) {
   port.status = normalizeStatus(port.status);
-
-  const el = document.createElement('div');
-  el.className = `port ${port.status} ${isSelected ? 'selected' : ''}`;
-
-  const portNumber = document.createElement('div');
-  portNumber.className = 'port-number';
-  portNumber.textContent = `${port.portKind} ${port.number}`;
-
-  const portLabel = document.createElement('div');
-  portLabel.className = 'port-label';
-
-  if (port.status === 'available') {
-    portLabel.title = 'Available';
-    portLabel.textContent = 'Available';
-  } else {
-    portLabel.title = port.connectionType || STATUS_LABELS[port.status] || 'No type';
-    portLabel.textContent = port.connectionType || STATUS_LABELS[port.status] || 'No type';
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `port ${port.status} ${port.id === selectedPortId ? "is-selected" : ""}`;
+  button.dataset.focusKey = portDraftKey(currentDevice().id, port.id);
+  button.setAttribute("aria-pressed", String(port.id === selectedPortId));
+  button.setAttribute(
+    "aria-label",
+    `${port.portKind} port ${port.number}, ${STATUS_LABELS[port.status]}, ${port.connectionType || "no connection type"}, ${port.connectedTo || "no destination"}`,
+  );
+  const number = document.createElement("span");
+  number.className = "port-number";
+  number.textContent = `${port.portKind} ${port.number}`;
+  const status = document.createElement("span");
+  status.className = "port-status";
+  status.textContent = STATUS_LABELS[port.status];
+  const label = document.createElement("span");
+  label.className = "port-label";
+  label.textContent = port.connectionType || "No type";
+  label.title = label.textContent;
+  const sublabel = document.createElement("span");
+  sublabel.className = "port-sublabel";
+  sublabel.textContent = port.connectedTo || port.vlan || "-";
+  sublabel.title = sublabel.textContent;
+  button.append(number, status, label, sublabel);
+  if (portDrafts.has(portDraftKey(currentDevice().id, port.id))) {
+    const draftLabel = document.createElement("span");
+    draftLabel.className = "port-draft-label";
+    draftLabel.textContent = "Unsaved";
+    button.appendChild(draftLabel);
+    button.setAttribute(
+      "aria-label",
+      `${button.getAttribute("aria-label")}, unsaved changes`,
+    );
   }
-
-  const portSubLabel = document.createElement('div');
-  portSubLabel.className = 'port-sublabel';
-  portSubLabel.title = port.connectedTo || port.vlan || '';
-  portSubLabel.textContent = port.connectedTo || port.vlan || '-';
-
-  el.appendChild(portNumber);
-  el.appendChild(portLabel);
-  el.appendChild(portSubLabel);
-
-  return el;
+  return button;
 }
 
 function renderPorts() {
-  const grid = document.querySelector('#portGrid');
+  const grid = document.querySelector("#portGrid");
   const device = currentDevice();
-
-  grid.innerHTML = '';
-
+  const focusKey = captureListFocus(grid);
+  const scrollLeft = grid.scrollLeft;
+  grid.replaceChildren();
+  grid.classList.toggle("is-empty", !device || device.ports.length === 0);
   if (!device) {
-    const message = document.createElement('div');
-
-    message.textContent = 'Add or select a device from the sidebar to view its interfaces.';
-    message.style.padding = '20px';
-    message.style.color = 'var(--text-muted)';
-
+    const message = document.createElement("p");
+    message.className = "empty-message";
+    message.textContent = "Add or select a device to view its interfaces.";
     grid.appendChild(message);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Add your first device";
+    button.addEventListener("click", beginDeviceCreate);
+    grid.appendChild(button);
+    updatePortScrollHint();
     return;
   }
-
-  device.ports.forEach(port => {
-    const isSelected = port.number === selectedPortNumber && port.portKind === selectedPortKind;
-    const el = createPortElement(port, isSelected);
-
-    el.onclick = () => {
-      selectedPortNumber = port.number;
-      selectedPortKind = port.portKind;
-      renderPorts();
-      renderForm();
-    };
-
-    grid.appendChild(el);
+  if (!device.ports.length) {
+    const message = document.createElement("p");
+    message.className = "empty-message";
+    message.textContent =
+      "This device has no ports. Edit the device to add interfaces.";
+    grid.appendChild(message);
+    updatePortScrollHint();
+    return;
+  }
+  const layout =
+    editingDeviceId === device.id
+      ? document.querySelector("#devicePortLayoutSelect").value
+      : device.portLayout;
+  const splitLayout = layout === "split";
+  const orderedPorts = [...device.ports].sort((first, second) => {
+    if (first.portKind !== second.portKind)
+      return first.portKind === "WAN" ? -1 : 1;
+    return first.number - second.number;
   });
+  grid.dataset.layout = splitLayout ? "split" : "alternating";
+  grid.style.setProperty(
+    "--port-columns",
+    String(Math.max(1, Math.ceil(orderedPorts.length / 2))),
+  );
+  orderedPorts.forEach((port) => {
+    const button = createPortButton(port);
+    button.addEventListener("click", () => {
+      selectedPortId = port.id;
+      renderPorts();
+      renderPortForm();
+    });
+    grid.appendChild(button);
+  });
+  grid.scrollLeft = scrollLeft;
+  restoreListFocus(grid, focusKey);
+  updatePortScrollHint();
 }
 
-function renderForm() {
+function renderPortForm() {
   const port = currentPort();
-  const detailsCard = document.querySelector('.card.details');
-  const form = document.querySelector('#portForm');
-
-  if (!port) {
-    detailsCard.style.display = 'none';
-    return;
-  }
-
-  detailsCard.style.display = 'block';
-  port.status = normalizeStatus(port.status);
-
-  for (const [key, value] of Object.entries(port)) {
-    if (form.elements[key]) {
-      form.elements[key].value = value ?? '';
-    }
-  }
+  const card = document.querySelector(".card.details");
+  card.hidden = !port;
+  updatePortEditStatus();
+  if (!port) return;
+  const form = document.querySelector("#portForm");
+  const draft = portDrafts.get(portDraftKey(currentDevice().id, port.id));
+  Object.entries({ ...port, ...draft }).forEach(([key, value]) => {
+    if (form.elements[key]) form.elements[key].value = value ?? "";
+  });
+  form.elements.number.value = `${port.portKind} ${port.number}`;
 }
 
 function renderProjectDevicesSummary() {
-  const container = document.querySelector('#projectDevicesSummary');
-  container.innerHTML = '';
-
-  if (devices.length === 0) {
-    const message = document.createElement('p');
-    message.textContent = 'No devices have been added to this project.';
-    message.style.color = 'var(--text-muted)';
-    message.style.fontSize = '14px';
+  const container = document.querySelector("#projectDevicesSummary");
+  const focusKey = captureListFocus(container);
+  const search = document
+    .querySelector("#deviceSearchInput")
+    .value.trim()
+    .toLowerCase();
+  const filtered = devices.filter((device) =>
+    deviceMatchesSearch(device, search),
+  );
+  container.replaceChildren();
+  if (!filtered.length) {
+    const message = document.createElement("p");
+    message.className = "empty-message";
+    message.textContent = devices.length
+      ? "No matching devices."
+      : "No devices have been added to this project.";
     container.appendChild(message);
     return;
   }
-
-  devices.forEach(device => {
+  filtered.forEach((device) => {
     const counts = getDeviceCounts(device);
-
-    const button = document.createElement('button');
-    button.className = `summary-device ${device.id === selectedDeviceId ? 'active' : ''}`;
-
-    const name = document.createElement('strong');
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `summary-device ${device.id === selectedDeviceId ? "is-selected" : ""}`;
+    button.dataset.focusKey = JSON.stringify(["summary", device.id]);
+    button.setAttribute("aria-pressed", String(device.id === selectedDeviceId));
+    const name = document.createElement("strong");
     name.textContent = device.name;
-
-    const meta = document.createElement('small');
-    meta.textContent = `${device.type} · ${device.location || 'No location'} · LAN: ${getLanCount(device)} · WAN: ${getWanCount(device)}`;
-
-    const br = document.createElement('br');
-
-    const status = document.createElement('small');
-    status.textContent = `Active: ${counts.active} · No link: ${counts['no-link']} · Available: ${counts.available} · Unknown Device: ${counts['unknown-device']}`;
-
-    button.appendChild(name);
-    button.appendChild(meta);
-    button.appendChild(br);
-    button.appendChild(status);
-
-    button.onclick = () => {
+    const meta = document.createElement("small");
+    meta.textContent = `${device.type} | ${device.location || "No location"} | LAN: ${getKindCount(device, "LAN")} | WAN: ${getKindCount(device, "WAN")}`;
+    const statuses = document.createElement("small");
+    statuses.textContent = `Active: ${counts.active} | No link: ${counts["no-link"]} | Available: ${counts.available} | Unknown: ${counts["unknown-device"]}`;
+    button.append(name, meta, statuses);
+    button.addEventListener("click", () => {
       selectedDeviceId = device.id;
-      selectedPortNumber = null;
-      selectedPortKind = null;
+      selectedPortId = null;
       render();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
+      document.querySelector(".device-header").scrollIntoView({
+        block: "start",
+        behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")
+          .matches
+          ? "instant"
+          : "smooth",
+      });
+    });
     container.appendChild(button);
   });
-}
-
-function createPrintStatusLegend() {
-  const legend = document.createElement('section');
-  legend.className = 'print-status-legend';
-
-  const title = document.createElement('h2');
-  title.textContent = 'Port status legend';
-
-  const items = document.createElement('div');
-  items.className = 'print-legend-items';
-
-  const statuses = [
-    { className: 'active', label: 'Active' },
-    { className: 'no-link', label: 'No link' },
-    { className: 'available', label: 'Available' },
-    { className: 'unknown-device', label: 'Unknown Device' }
-  ];
-
-  statuses.forEach(status => {
-    const item = document.createElement('span');
-    item.className = 'print-legend-item';
-
-    const line = document.createElement('i');
-    line.className = `print-legend-line ${status.className}`;
-
-    const text = document.createElement('span');
-    text.textContent = status.label;
-
-    item.appendChild(line);
-    item.appendChild(text);
-    items.appendChild(item);
-  });
-
-  legend.appendChild(title);
-  legend.appendChild(items);
-
-  return legend;
+  restoreListFocus(container, focusKey);
 }
 
 function renderPrintReport() {
-  const report = document.querySelector('#printReport');
-
-  if (!report) {
-    return;
-  }
-
-  report.innerHTML = '';
-
-  const header = document.createElement('div');
-  header.className = 'print-header';
-
-  const title = document.createElement('h1');
-  title.textContent = 'VNetCore';
-
-  const subtitle = document.createElement('p');
-  subtitle.textContent = 'Network Infrastructure Documentation';
-
-  const projectNameBox = document.createElement('div');
-  projectNameBox.className = 'print-project-name';
-
-  const projectLabel = document.createElement('span');
-  projectLabel.textContent = 'Project name';
-
-  const projectName = document.createElement('strong');
-  projectName.textContent = project.projectName || 'Unnamed project';
-
-  projectNameBox.appendChild(projectLabel);
-  projectNameBox.appendChild(projectName);
-
-  header.appendChild(title);
-  header.appendChild(subtitle);
-  header.appendChild(projectNameBox);
-
+  const report = document.querySelector("#printReport");
+  report.replaceChildren();
+  const header = document.createElement("header");
+  header.className = "print-header";
+  const title = document.createElement("h1");
+  title.textContent = "VNetCore";
+  const meta = document.createElement("p");
+  meta.textContent = `Network Infrastructure Documentation | Responsible: ${project.owner || "Not specified"} | Review: ${project.reviewDate || "Not specified"} | Generated: ${new Date().toLocaleString()}`;
+  header.append(title, meta);
   report.appendChild(header);
-  report.appendChild(createPrintStatusLegend());
 
-  if (devices.length === 0) {
-    const empty = document.createElement('p');
-    empty.textContent = 'No devices have been added to this project.';
+  const projectBanner = document.createElement("section");
+  projectBanner.className = "print-project-banner";
+  const projectLabel = document.createElement("span");
+  projectLabel.textContent = "Active project";
+  const projectName = document.createElement("strong");
+  projectName.textContent = project.projectName || "Unnamed project";
+  projectBanner.append(projectLabel, projectName);
+  report.appendChild(projectBanner);
+
+  if (!devices.length) {
+    const empty = document.createElement("p");
+    empty.textContent = "No devices have been added to this project.";
     report.appendChild(empty);
     return;
   }
 
-  devices.forEach(device => {
-    const deviceSection = document.createElement('section');
-    deviceSection.className = 'print-device';
-
-    const deviceHeader = document.createElement('div');
-    deviceHeader.className = 'print-device-header';
-
-    const name = document.createElement('h2');
+  const overview = document.createElement("section");
+  overview.className = "print-overview";
+  const overviewLabel = document.createElement("span");
+  overviewLabel.className = "print-section-label";
+  overviewLabel.textContent = "Project overview";
+  const overviewTitle = document.createElement("h2");
+  overviewTitle.textContent = "All devices";
+  const summaryGrid = document.createElement("div");
+  summaryGrid.className = "print-summary-grid";
+  devices.forEach((device) => {
+    const counts = getDeviceCounts(device);
+    const summary = document.createElement("article");
+    summary.className = "print-summary-device";
+    const name = document.createElement("strong");
     name.textContent = device.name;
+    const description = document.createElement("small");
+    description.textContent = `${device.type} | ${device.location || "No location"} | LAN: ${getKindCount(device, "LAN")} | WAN: ${getKindCount(device, "WAN")}`;
+    const statuses = document.createElement("small");
+    statuses.textContent = `Active: ${counts.active} | No link: ${counts["no-link"]} | Available: ${counts.available} | Unknown: ${counts["unknown-device"]}`;
+    summary.append(name, description, statuses);
+    summaryGrid.appendChild(summary);
+  });
+  overview.append(overviewLabel, overviewTitle, summaryGrid);
+  report.appendChild(overview);
 
-    const meta = document.createElement('p');
-    meta.textContent = `${device.type} · ${device.location || 'No location'} · LAN: ${getLanCount(device)} · WAN: ${getWanCount(device)}`;
+  devices.forEach((device) => {
+    const section = document.createElement("section");
+    section.className = "print-device";
+    const deviceHeader = document.createElement("header");
+    deviceHeader.className = "print-device-header";
+    const deviceIdentity = document.createElement("div");
+    const heading = document.createElement("h2");
+    heading.textContent = device.name;
+    const deviceMeta = document.createElement("p");
+    deviceMeta.textContent = `${device.type} | ${device.location || "No location"} | LAN: ${getKindCount(device, "LAN")} | WAN: ${getKindCount(device, "WAN")}`;
+    const deviceTag = document.createElement("span");
+    deviceTag.className = "print-device-tag";
+    deviceTag.textContent = device.type;
+    deviceIdentity.append(heading, deviceMeta);
+    deviceHeader.append(deviceIdentity, deviceTag);
 
-    deviceHeader.appendChild(name);
-    deviceHeader.appendChild(meta);
-
-    const portsWrapper = document.createElement('div');
-    portsWrapper.className = 'print-ports';
-
-    device.ports.forEach(port => {
-      portsWrapper.appendChild(createPortElement(port));
+    const counts = getDeviceCounts(device);
+    const countList = document.createElement("div");
+    countList.className = "print-device-counts";
+    Object.entries(STATUS_LABELS).forEach(([status, label]) => {
+      const count = document.createElement("span");
+      count.className = `print-count ${status}`;
+      count.textContent = `${label} ${counts[status]}`;
+      countList.appendChild(count);
     });
 
-    deviceSection.appendChild(deviceHeader);
-    deviceSection.appendChild(portsWrapper);
-    report.appendChild(deviceSection);
+    const ports = document.createElement("div");
+    ports.className = "print-ports";
+    device.ports.forEach((port) => {
+      const status = normalizeStatus(port.status);
+      const card = document.createElement("article");
+      card.className = `print-port ${status}`;
+      const number = document.createElement("span");
+      number.className = "port-number";
+      number.textContent = `${port.portKind} ${port.number}`;
+      const statusText = document.createElement("span");
+      statusText.className = "port-status";
+      statusText.textContent = STATUS_LABELS[status];
+      const type = document.createElement("strong");
+      type.className = "port-label";
+      type.textContent = port.connectionType || "No type";
+      const destination = document.createElement("span");
+      destination.className = "port-sublabel";
+      destination.textContent = port.connectedTo || "No destination";
+      const details = document.createElement("p");
+      details.className = "print-port-details";
+      details.textContent = `VLAN: ${port.vlan || "-"} | IP / MAC: ${port.address || "-"}${port.notes ? ` | Notes: ${port.notes}` : ""}`;
+      card.append(number, statusText, type, destination, details);
+      ports.appendChild(card);
+    });
+    section.append(deviceHeader, countList, ports);
+    report.appendChild(section);
   });
 }
 
-function renderFooterYear() {
-  const yearElement = document.querySelector('#currentYear');
-
-  if (yearElement) {
-    yearElement.textContent = new Date().getFullYear();
-  }
-}
-
 function renderDeviceTypeField() {
-  const typeSelect = document.querySelector('#deviceTypeSelect');
-  const customTypeInput = document.querySelector('#customDeviceTypeInput');
-
-  if (!typeSelect || !customTypeInput) {
-    return;
-  }
-
-  if (typeSelect.value === 'Other') {
-    customTypeInput.classList.add('visible');
-    customTypeInput.required = true;
-  } else {
-    customTypeInput.classList.remove('visible');
-    customTypeInput.required = false;
-    customTypeInput.value = '';
-  }
+  const select = document.querySelector("#deviceTypeSelect");
+  const label = document.querySelector("#customDeviceTypeLabel");
+  const input = document.querySelector("#customDeviceTypeInput");
+  const custom = select.value === "Other";
+  label.classList.toggle("visible", custom);
+  input.required = custom;
+  input.disabled = !custom;
 }
 
 function render() {
-  renderProjectName();
+  const validDraftKeys = new Set(
+    devices.flatMap((device) =>
+      device.ports.map((port) => portDraftKey(device.id, port.id)),
+    ),
+  );
+  for (const key of portDrafts.keys()) {
+    if (!validDraftKeys.has(key)) portDrafts.delete(key);
+  }
+  renderProjectMeta();
   renderDevices();
   renderHeader();
   renderPorts();
-  renderForm();
+  renderPortForm();
   renderProjectDevicesSummary();
   renderPrintReport();
-  renderFooterYear();
+  document.querySelector("#currentYear").textContent = new Date().getFullYear();
   renderDeviceTypeField();
-  save();
 }
 
 function safeFileName(value) {
-  return String(value || 'vnetcore-project')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gi, '-')
-    .replace(/^-+|-+$/g, '') || 'vnetcore-project';
+  return (
+    String(value || "vnetcore-project")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "") || "vnetcore-project"
+  );
 }
 
 function downloadTextFile(filename, content, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
+  const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+  const link = document.createElement("a");
   link.href = url;
   link.download = filename;
   document.body.appendChild(link);
   link.click();
-
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function exportJson() {
-  project.devices = devices;
-
-  const filename = `${safeFileName(project.projectName)}.json`;
-  const content = JSON.stringify(project, null, 2);
-
-  downloadTextFile(filename, content, 'application/json;charset=utf-8');
-}
-
-function csvEscape(value) {
-  const text = String(value ?? '');
-
-  if (/[",\n\r]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-
-  return text;
-}
-
-function projectToCsv() {
-  const rows = [CSV_HEADERS];
-
-  devices.forEach(device => {
-    device.ports.forEach(port => {
-      rows.push([
-        project.projectName,
-        device.name,
-        device.type,
-        device.location,
-        port.portKind,
-        port.number,
-        STATUS_LABELS[normalizeStatus(port.status)],
-        port.connectionType,
-        port.connectedTo,
-        port.vlan,
-        port.address,
-        port.notes
-      ]);
-    });
+function exportJson(sourceProject = project, suffix = "") {
+  const normalized = normalizeProject({
+    ...sourceProject,
+    devices: sourceProject.devices || devices,
   });
-
-  return rows.map(row => row.map(csvEscape).join(',')).join('\n');
+  const filename = `${safeFileName(normalized.projectName)}${suffix}.json`;
+  downloadTextFile(
+    filename,
+    JSON.stringify(normalized, null, 2),
+    "application/json;charset=utf-8",
+  );
+  recordBackupExport();
+  showNotification(`Exported ${filename}`);
 }
 
 function exportCsv() {
   const filename = `${safeFileName(project.projectName)}.csv`;
-  const content = projectToCsv();
-
-  downloadTextFile(filename, content, 'text/csv;charset=utf-8');
+  downloadTextFile(
+    filename,
+    projectToCsv({ ...project, devices }),
+    "text/csv;charset=utf-8",
+  );
+  recordBackupExport();
+  showNotification(`Exported ${filename}`);
 }
 
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let value = '';
-  let insideQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
-
-    if (char === '"' && insideQuotes && nextChar === '"') {
-      value += '"';
-      i++;
-      continue;
-    }
-
-    if (char === '"') {
-      insideQuotes = !insideQuotes;
-      continue;
-    }
-
-    if (char === ',' && !insideQuotes) {
-      row.push(value);
-      value = '';
-      continue;
-    }
-
-    if ((char === '\n' || char === '\r') && !insideQuotes) {
-      if (char === '\r' && nextChar === '\n') {
-        i++;
-      }
-
-      row.push(value);
-
-      if (row.some(cell => cell.trim() !== '')) {
-        rows.push(row);
-      }
-
-      row = [];
-      value = '';
-      continue;
-    }
-
-    value += char;
-  }
-
-  row.push(value);
-
-  if (row.some(cell => cell.trim() !== '')) {
-    rows.push(row);
-  }
-
-  return rows;
+function parseImportContent(mode, content) {
+  if (mode === "csv") return csvToProject(content);
+  const parsed = JSON.parse(content);
+  return normalizeProject(parsed, { strict: true });
 }
 
-function csvRowsToObjects(rows) {
-  if (rows.length < 2) {
-    return [];
-  }
-
-  const headers = rows[0].map(header => header.trim());
-
-  return rows.slice(1).map(row => {
-    const item = {};
-
-    headers.forEach((header, index) => {
-      item[header] = row[index] ?? '';
-    });
-
-    return item;
-  });
+function reviewImport(candidate) {
+  pendingImport = candidate;
+  const portCount = candidate.devices.reduce(
+    (total, device) => total + device.ports.length,
+    0,
+  );
+  document.querySelector("#importSummary").textContent =
+    `Project "${candidate.projectName}" contains ${candidate.devices.length} devices and ${portCount} ports.`;
+  document.querySelector("#importDialog").showModal();
 }
 
-function importCsvContent(text) {
-  const rows = parseCsv(text);
-  const records = csvRowsToObjects(rows);
-
-  if (records.length === 0) {
-    alert('The CSV file does not contain valid data.');
-    return;
-  }
-
-  const groupedDevices = new Map();
-  const importedProjectName = records[0].projectName?.trim() || 'Imported project';
-
-  records.forEach(record => {
-    const deviceName = record.deviceName?.trim() || 'Unnamed device';
-    const deviceType = record.deviceType?.trim() || 'Other';
-    const deviceLocation = record.deviceLocation?.trim() || '';
-    const key = `${deviceName}|||${deviceType}|||${deviceLocation}`;
-
-    if (!groupedDevices.has(key)) {
-      groupedDevices.set(key, {
-        id: crypto.randomUUID(),
-        name: deviceName,
-        type: deviceType,
-        location: deviceLocation,
-        ports: []
-      });
-    }
-
-    groupedDevices.get(key).ports.push({
-      number: Number(record.portNumber || groupedDevices.get(key).ports.length + 1),
-      status: normalizeStatus(record.status),
-      connectedTo: record.connectedTo || '',
-      connectionType: record.connectionType || '',
-      vlan: record.vlan || '',
-      address: record.address || '',
-      notes: record.notes || '',
-      portKind: record.portKind?.trim() || 'LAN'
-    });
-  });
-
-  project = {
-    projectName: importedProjectName,
-    devices: normalizeDevices(Array.from(groupedDevices.values()))
-  };
-
+function applyPendingImport() {
+  if (!pendingImport) return;
+  const previous = snapshot();
+  project = pendingImport;
   devices = project.devices;
   selectedDeviceId = devices[0]?.id || null;
-  selectedPortNumber = null;
-  selectedPortKind = null;
-
-  render();
-}
-
-function importJsonContent(text) {
-  try {
-    const parsed = JSON.parse(text);
-
-    if (Array.isArray(parsed)) {
-      project = {
-        projectName: 'Imported project',
-        devices: normalizeDevices(parsed)
-      };
-    } else {
-      project = {
-        projectName: parsed.projectName || 'Imported project',
-        devices: normalizeDevices(parsed.devices || [])
-      };
-    }
-
-    devices = project.devices;
-    selectedDeviceId = devices[0]?.id || null;
-    selectedPortNumber = null;
-    selectedPortKind = null;
-
-    render();
-  } catch (error) {
-    alert('Error importing JSON: ' + error.message);
-  }
+  selectedPortId = null;
+  pendingImport = null;
+  portDrafts.clear();
+  cancelDeviceEdit();
+  commitChange(previous, "Imported project");
 }
 
 function openImportPicker(mode) {
-  const input = document.querySelector('#fileImportInput');
-
   importMode = mode;
-  input.value = '';
-  input.accept = mode === 'json' ? '.json,application/json' : '.csv,text/csv';
+  const input = document.querySelector("#fileImportInput");
+  input.value = "";
+  input.accept = mode === "json" ? ".json,application/json" : ".csv,text/csv";
   input.click();
 }
 
-function closeMenus() {
-  document.querySelectorAll('.menu.open').forEach(menu => {
-    menu.classList.remove('open');
+function closeMenus(options = {}) {
+  let focusTarget = options.restoreFocus;
+  document.querySelectorAll(".menu.open").forEach((menu) => {
+    if (menu.querySelector(".menu-options").contains(document.activeElement)) {
+      focusTarget ||= menu.querySelector(".menu-btn");
+    }
+    menu.classList.remove("open");
+    menu.querySelector(".menu-btn").setAttribute("aria-expanded", "false");
+    menu.querySelector(".menu-options").hidden = true;
   });
+  focusTarget?.focus();
 }
 
-document.querySelector('#projectNameInput').addEventListener('input', event => {
-  project.projectName = event.target.value.trim() || 'Unnamed project';
-  save();
-  renderProjectName();
-  renderPrintReport();
+function beginDeviceEdit() {
+  const device = currentDevice();
+  if (!device) return;
+  editingDeviceId = device.id;
+  setSidebarExpanded(true);
+  document.querySelector(".add-device-card").open = true;
+  document.querySelector("#deviceFormTitle").textContent = "Edit device";
+  const form = document.querySelector("#deviceForm");
+  form.elements.model.value = device.name;
+  const knownTypes = Array.from(form.elements.type.options).map(
+    (option) => option.value,
+  );
+  const isKnown = knownTypes.includes(device.type) && device.type !== "Other";
+  form.elements.type.value = isKnown ? device.type : "Other";
+  form.elements.customType.value = isKnown ? "" : device.type;
+  form.elements.location.value = device.location;
+  form.elements.portLayout.value = device.portLayout;
+  form.elements.wanPorts.value = getKindCount(device, "WAN");
+  form.elements.lanPorts.value = getKindCount(device, "LAN");
+  document.querySelector("#deviceSubmitBtn").textContent = "Save device";
+  document.querySelector("#cancelDeviceEditBtn").classList.add("visible");
+  renderDeviceTypeField();
+  form.elements.model.focus();
+}
+
+function cancelDeviceEdit() {
+  editingDeviceId = null;
+  document.querySelector("#deviceFormTitle").textContent = "Add device";
+  const form = document.querySelector("#deviceForm");
+  form.reset();
+  document.querySelector("#deviceSubmitBtn").textContent = "Add device";
+  document.querySelector("#cancelDeviceEditBtn").classList.remove("visible");
+  renderDeviceTypeField();
+  renderPorts();
+}
+
+function duplicateCurrentDevice() {
+  const device = currentDevice();
+  if (!device) return;
+  const previous = snapshot();
+  const copy = cloneProject({ projectName: "copy", devices: [device] })
+    .devices[0];
+  copy.id = createId();
+  copy.name = `${device.name} copy`.slice(0, LIMITS.deviceName);
+  copy.ports.forEach((port) => {
+    port.id = createId();
+  });
+  const index = devices.findIndex((item) => item.id === device.id);
+  devices.splice(index + 1, 0, copy);
+  selectedDeviceId = copy.id;
+  selectedPortId = null;
+  commitChange(previous, `Duplicated ${device.name}`);
+}
+
+function moveCurrentDevice(offset) {
+  const device = currentDevice();
+  const index = devices.findIndex((item) => item.id === device?.id);
+  const target = index + offset;
+  if (index < 0 || target < 0 || target >= devices.length) return;
+  const previous = snapshot();
+  [devices[index], devices[target]] = [devices[target], devices[index]];
+  commitChange(previous, `Moved ${device.name}`);
+}
+
+document
+  .querySelector("#projectNameInput")
+  .addEventListener("input", (event) => {
+    project.projectName = event.target.value.slice(0, LIMITS.projectName);
+    document.querySelector("#projectDisplayName").textContent =
+      project.projectName || "Unnamed project";
+    renderPrintReport();
+    scheduleSave();
+  });
+document
+  .querySelector("#projectNameInput")
+  .addEventListener("blur", (event) => {
+    if (!event.target.value.trim()) project.projectName = "Unnamed project";
+    else project.projectName = event.target.value.trim();
+    renderProjectMeta();
+    saveProject();
+  });
+document
+  .querySelector("#projectOwnerInput")
+  .addEventListener("input", (event) => {
+    project.owner = event.target.value.slice(0, LIMITS.owner);
+    renderPrintReport();
+    scheduleSave();
+  });
+document
+  .querySelector("#projectReviewDateInput")
+  .addEventListener("change", (event) => {
+    project.reviewDate = event.target.value;
+    renderPrintReport();
+    saveProject();
+  });
+document.querySelector("#deviceSearchInput").addEventListener("input", () => {
+  renderDevices();
+  renderProjectDevicesSummary();
 });
+document
+  .querySelector("#deviceTypeSelect")
+  .addEventListener("change", renderDeviceTypeField);
+document
+  .querySelector("#devicePortLayoutSelect")
+  .addEventListener("change", () => {
+    const device = currentDevice();
+    if (device && editingDeviceId === device.id) renderPorts();
+  });
 
-document.querySelector('#deviceTypeSelect').addEventListener('change', renderDeviceTypeField);
-
-document.querySelector('#deviceForm').addEventListener('submit', event => {
+document.querySelector("#deviceForm").addEventListener("submit", (event) => {
   event.preventDefault();
-
   const data = Object.fromEntries(new FormData(event.target).entries());
-
-  const wanCount = Number(data.wanPorts || 0);
-  const lanCount = Number(data.lanPorts || 0);
-
-  if (lanCount <= 0) {
-    alert('You must add at least one LAN port.');
+  const wanCount = Number(data.wanPorts);
+  const lanCount = Number(data.lanPorts);
+  if (
+    !Number.isInteger(wanCount) ||
+    !Number.isInteger(lanCount) ||
+    wanCount < 0 ||
+    lanCount < 1 ||
+    wanCount > 16 ||
+    lanCount > 96
+  ) {
+    showNotification("Use whole port counts within the allowed ranges.");
     return;
   }
-
-  const selectedType = data.type;
-  const customType = data.customType?.trim();
-  const finalType = selectedType === 'Other' ? customType : selectedType;
-
+  const finalType = data.type === "Other" ? data.customType.trim() : data.type;
   if (!finalType) {
-    alert('You must specify the device type.');
+    showNotification("Specify the device type.");
     return;
   }
-
-  const device = {
-    id: crypto.randomUUID(),
-    name: data.model.trim(),
-    type: finalType,
-    location: data.location.trim(),
-    ports: makeMixedPorts(wanCount, lanCount)
-  };
-
-  devices.push(device);
-  selectedDeviceId = device.id;
-  selectedPortNumber = null;
-  selectedPortKind = null;
-
-  event.target.reset();
-  render();
+  const previous = snapshot();
+  if (editingDeviceId) {
+    const device = devices.find((item) => item.id === editingDeviceId);
+    if (!device) return cancelDeviceEdit();
+    device.name = data.model.trim().slice(0, LIMITS.deviceName);
+    device.type = finalType.slice(0, LIMITS.deviceType);
+    device.location = data.location.trim().slice(0, LIMITS.location);
+    device.portLayout = data.portLayout === "split" ? "split" : "alternating";
+    device.ports = [
+      ...makePorts("WAN", wanCount, device.ports),
+      ...makePorts("LAN", lanCount, device.ports),
+    ];
+    if (!device.ports.some((port) => port.id === selectedPortId))
+      selectedPortId = null;
+    const message = `Updated ${device.name}`;
+    cancelDeviceEdit();
+    commitChange(previous, message);
+  } else {
+    const device = {
+      id: createId(),
+      name: data.model.trim().slice(0, LIMITS.deviceName),
+      type: finalType.slice(0, LIMITS.deviceType),
+      location: data.location.trim().slice(0, LIMITS.location),
+      portLayout: data.portLayout === "split" ? "split" : "alternating",
+      ports: [...makePorts("WAN", wanCount), ...makePorts("LAN", lanCount)],
+    };
+    devices.push(device);
+    selectedDeviceId = device.id;
+    selectedPortId = null;
+    event.target.reset();
+    renderDeviceTypeField();
+    commitChange(previous, `Added ${device.name}`);
+  }
 });
 
-document.querySelector('#portForm').addEventListener('submit', event => {
-  event.preventDefault();
-
+document
+  .querySelector("#portForm")
+  .addEventListener("input", rememberPortDraft);
+document
+  .querySelector("#portForm")
+  .addEventListener("change", rememberPortDraft);
+document.querySelector("#discardPortDraftBtn").addEventListener("click", () => {
   const port = currentPort();
-
-  if (!port) {
-    return;
-  }
-
-  const data = Object.fromEntries(new FormData(event.target).entries());
-
-  port.number = Number(data.number);
-  port.status = normalizeStatus(data.status);
-  port.connectionType = data.connectionType.trim();
-  port.connectedTo = data.connectedTo.trim();
-  port.vlan = data.vlan.trim();
-  port.address = data.address.trim();
-  port.notes = data.notes.trim();
-
-  render();
+  if (!port) return;
+  portDrafts.delete(portDraftKey(currentDevice().id, port.id));
+  renderPorts();
+  renderPortForm();
+  document.querySelector("#portForm").elements.status.focus();
 });
 
-document.querySelector('#clearAllBtn').onclick = clearAllDevices;
+document.querySelector("#portForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const port = currentPort();
+  if (!port) return;
+  const previous = snapshot();
+  const data = Object.fromEntries(new FormData(event.target).entries());
+  port.status = normalizeStatus(data.status);
+  port.connectionType = data.connectionType.trim().slice(0, LIMITS.shortField);
+  port.connectedTo = data.connectedTo.trim().slice(0, LIMITS.shortField);
+  port.vlan = data.vlan.trim().slice(0, 80);
+  port.address = data.address.trim().slice(0, LIMITS.shortField);
+  port.notes = data.notes.trim().slice(0, LIMITS.notes);
+  portDrafts.delete(portDraftKey(currentDevice().id, port.id));
+  commitChange(previous, `Updated ${port.portKind} port ${port.number}`);
+});
 
-document.querySelector('#exportJsonBtn').onclick = () => {
+document
+  .querySelector("#clearAllBtn")
+  .addEventListener("click", clearAllDevices);
+document
+  .querySelector("#newBlankProjectBtn")
+  .addEventListener("click", startBlankProject);
+document
+  .querySelector("#editDeviceBtn")
+  .addEventListener("click", beginDeviceEdit);
+document
+  .querySelector("#duplicateDeviceBtn")
+  .addEventListener("click", duplicateCurrentDevice);
+document
+  .querySelector("#moveDeviceUpBtn")
+  .addEventListener("click", () => moveCurrentDevice(-1));
+document
+  .querySelector("#moveDeviceDownBtn")
+  .addEventListener("click", () => moveCurrentDevice(1));
+document
+  .querySelector("#cancelDeviceEditBtn")
+  .addEventListener("click", cancelDeviceEdit);
+document.querySelector("#undoBtn").addEventListener("click", undoLastChange);
+document.querySelector("#downloadRecoveryBtn").addEventListener("click", () => {
+  if (loadFailure?.raw) {
+    downloadTextFile(
+      "vnetcore-recovery-raw.txt",
+      loadFailure.raw,
+      "text/plain;charset=utf-8",
+    );
+  } else {
+    exportJson({ ...project, devices }, "-recovery");
+  }
+});
+document
+  .querySelector("#restoreBackupBtn")
+  .addEventListener("click", async () => {
+    const backup = readBackupProject();
+    if (!backup) {
+      showNotification("No valid local backup is available.");
+      return;
+    }
+    const confirmed = await requestConfirmation(
+      "Restore local backup",
+      `Restore "${backup.projectName}" and replace the active project? Download the raw recovery first if you need it.`,
+      "Restore backup",
+    );
+    if (!confirmed) return;
+    project = backup;
+    devices = project.devices;
+    selectedDeviceId = devices[0]?.id || null;
+    selectedPortId = null;
+    loadFailure = null;
+    portDrafts.clear();
+    cancelDeviceEdit();
+    saveProject({ keepBackup: false });
+    render();
+    showNotification("Local backup restored.");
+  });
+
+document.querySelector("#exportJsonBtn").addEventListener("click", () => {
   closeMenus();
   exportJson();
-};
-
-document.querySelector('#exportCsvBtn').onclick = () => {
+});
+document
+  .querySelector("#backupNoticeExportBtn")
+  .addEventListener("click", () => {
+    exportJson();
+  });
+document
+  .querySelector("#backupNoticeDismissBtn")
+  .addEventListener("click", () => {
+    const level = document.querySelector("#backupNotice").dataset.level;
+    showBackupIntroduction = false;
+    if (level !== "info") {
+      backupNoticeState.dismissedLevel = level;
+      backupNoticeState.dismissedAt = Date.now();
+      saveBackupNoticeState();
+    }
+    hideBackupNotice();
+  });
+document.querySelector("#exportCsvBtn").addEventListener("click", () => {
   closeMenus();
   exportCsv();
-};
-
-document.querySelector('#importJsonBtn').onclick = () => {
-  closeMenus();
-  openImportPicker('json');
-};
-
-document.querySelector('#importCsvBtn').onclick = () => {
-  closeMenus();
-  openImportPicker('csv');
-};
-
-document.querySelector('#fileImportInput').addEventListener('change', event => {
-  const file = event.target.files[0];
-
-  if (!file || !importMode) {
-    return;
-  }
-
-  const reader = new FileReader();
-
-  reader.onload = () => {
-    const content = String(reader.result || '');
-
-    if (importMode === 'json') {
-      importJsonContent(content);
-    }
-
-    if (importMode === 'csv') {
-      importCsvContent(content);
-    }
-
-    importMode = null;
-  };
-
-  reader.readAsText(file);
 });
-
-document.querySelector('#printBtn').onclick = () => {
+document.querySelector("#importJsonBtn").addEventListener("click", () => {
+  closeMenus();
+  openImportPicker("json");
+});
+document.querySelector("#importCsvBtn").addEventListener("click", () => {
+  closeMenus();
+  openImportPicker("csv");
+});
+document.querySelector("#printBtn").addEventListener("click", () => {
   renderPrintReport();
   window.print();
-};
+});
 
-document.querySelectorAll('.menu-btn').forEach(button => {
-  button.addEventListener('click', event => {
+document
+  .querySelector("#fileImportInput")
+  .addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    if (!file || !importMode) return;
+    if (file.size > LIMITS.fileBytes) {
+      showNotification(
+        `The file exceeds the ${LIMITS.fileBytes / 1024 / 1024} MB limit.`,
+      );
+      importMode = null;
+      return;
+    }
+    const mode = importMode;
+    importMode = null;
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      try {
+        reviewImport(parseImportContent(mode, String(reader.result || "")));
+      } catch (error) {
+        showNotification(`Import rejected: ${error.message}`, {
+          persistent: true,
+        });
+      }
+    });
+    reader.addEventListener("error", () =>
+      showNotification(
+        `Could not read the file: ${reader.error?.message || "unknown error"}`,
+      ),
+    );
+    reader.addEventListener("abort", () =>
+      showNotification("File import was cancelled."),
+    );
+    reader.readAsText(file);
+  });
+
+document.querySelector("#importDialog").addEventListener("close", (event) => {
+  if (event.target.returnValue === "default") applyPendingImport();
+  else pendingImport = null;
+});
+
+document.querySelectorAll(".menu-btn").forEach((button) => {
+  button.addEventListener("click", (event) => {
     event.stopPropagation();
-
-    const menu = button.closest('.menu');
-    const isOpen = menu.classList.contains('open');
-
+    const menu = button.closest(".menu");
+    const shouldOpen = !menu.classList.contains("open");
     closeMenus();
-
-    if (!isOpen) {
-      menu.classList.add('open');
+    if (shouldOpen) {
+      menu.querySelector(".menu-options").hidden = false;
+      menu.classList.add("open");
+      button.setAttribute("aria-expanded", "true");
+      menu.querySelector(".menu-options button").focus();
+    }
+  });
+  button.addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+    event.preventDefault();
+    const menu = button.closest(".menu");
+    closeMenus();
+    menu.querySelector(".menu-options").hidden = false;
+    menu.classList.add("open");
+    button.setAttribute("aria-expanded", "true");
+    const items = menu.querySelectorAll('[role="menuitem"]');
+    items[event.key === "ArrowUp" ? items.length - 1 : 0].focus();
+  });
+});
+document.querySelectorAll(".menu-options").forEach((menu) => {
+  menu.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") {
+      closeMenus();
+      return;
+    }
+    const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
+    const index = items.indexOf(document.activeElement);
+    let next;
+    if (event.key === "ArrowDown") next = (index + 1) % items.length;
+    if (event.key === "ArrowUp")
+      next = (index - 1 + items.length) % items.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = items.length - 1;
+    if (next !== undefined) {
+      event.preventDefault();
+      items[next].focus();
     }
   });
 });
-
-document.addEventListener('click', closeMenus);
-
-window.addEventListener('beforeunload', event => {
-  event.preventDefault();
-
-  event.returnValue =
-    'Are you sure you want to leave? It is recommended to export your project first to make sure your changes are saved.';
+document.addEventListener("focusin", (event) => {
+  const openMenu = document.querySelector(".menu.open");
+  if (openMenu && !openMenu.contains(event.target)) closeMenus();
+});
+document.addEventListener("click", () => closeMenus());
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    const openButton = document.querySelector(".menu.open .menu-btn");
+    closeMenus({ restoreFocus: openButton });
+  }
 });
 
+document.querySelector("#toggleSidebarBtn").addEventListener("click", () => {
+  setSidebarExpanded(
+    document.querySelector("#sidebar").classList.contains("is-collapsed"),
+  );
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (!hasUnsavedChanges && portDrafts.size === 0) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
+
+if (devices.length && window.matchMedia?.("(max-width: 980px)").matches) {
+  document.querySelector(".project-card").open = false;
+  document.querySelector(".add-device-card").open = false;
+}
+window.addEventListener("resize", updatePortScrollHint);
+if (window.ResizeObserver) {
+  new ResizeObserver(updatePortScrollHint).observe(
+    document.querySelector("#portGrid"),
+  );
+}
+
 render();
+backupNoticeState.infoShown = true;
+saveBackupNoticeState();
+renderBackupNotice();
+setInterval(renderBackupNotice, 60 * 1000);
+window.addEventListener("focus", renderBackupNotice);
+window.addEventListener("storage", (event) => {
+  if (event.key !== BACKUP_NOTICE_KEY && event.key !== null) return;
+  backupNoticeState = loadBackupNoticeState();
+  showBackupIntroduction = !backupNoticeState.infoShown;
+  renderBackupNotice();
+});
+if (loaded.migrated) {
+  saveProject({ keepBackup: false });
+  showNotification("Existing project migrated to the new data format.");
+} else if (loadFailure) {
+  setSaveStatus("Stored data could not be loaded.", "error");
+  showNotification(
+    `Stored data was not overwritten: ${loadFailure.error.message}`,
+    {
+      recovery: true,
+      backup: Boolean(readBackupProject()),
+      persistent: true,
+    },
+  );
+} else {
+  setSaveStatus("Saved locally", "saved");
+}
