@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "icon-tile-stack",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-18T19:07:45.708Z",
+        "reason": "agent: only instance is the date picker month navigation, where arrow buttons sit beside the month title in a 3-column grid, not stacked above a heading"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-18T19:07:45.813Z",
+        "reason": "agent: both instances are false positives: guide-table-wrap cells have 8px 12px padding; device-details-fields summary is a 44px flex row with centred text inside 12px side padding"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "landing.html"
+        ],
+        "createdAt": "2026-11-18T19:54:06.449Z",
+        "reason": "agent: false positive; .why section and .local-inner both have clamp()-based padding (40-72px and 36-56px), visible in rendered screenshots at 375px and 1366px"
+      }
+    ]
+  }
+}

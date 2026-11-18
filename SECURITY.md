@@ -11,7 +11,17 @@ VNetCore is a local-first static application. It does not transmit project data,
 
 ## Deployment
 
-The included `netlify.toml` defines a restrictive Content Security Policy and other defensive headers. Equivalent headers must be configured when another static host is used.
+Run `npm run dist` and publish only the generated `dist/` folder. It contains the browser files and nothing else, so `node_modules/`, tests and tooling are never exposed.
+
+The included `netlify.toml` builds `dist/` and sends a restrictive Content Security Policy (including `frame-ancestors 'none'`, which a `<meta>` CSP cannot express), HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`. Configure equivalent headers when another static host is used.
+
+## Data recovery
+
+If stored data cannot be read at startup, VNetCore copies the unreadable text to `vnetcore.recovery.v1` (last three incidents) before any save, and never rotates unreadable data into the backup slot.
+
+## Third-party requests
+
+None. The IBM Plex fonts are self-hosted from `assets/fonts/`, and the CSP allows only the app's own origin.
 
 ## Reporting
 

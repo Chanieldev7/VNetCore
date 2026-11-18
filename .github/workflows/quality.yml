@@ -18,5 +18,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npx --yes html-validate@latest index.html
-      - run: npx --yes prettier@latest --check index.html styles.css app.js core.js tests package.json
+      - run: npx --yes html-validate@9 index.html landing.html
+      - run: npx --yes prettier@3 --check index.html styles.css app.js core.js boot.js date-picker.js landing.html landing.css landing.js demo-project.js tests package.json
