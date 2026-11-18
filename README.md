@@ -40,7 +40,7 @@ Do not store passwords, private keys or tokens. See `SECURITY.md` for privacy an
 - **Review date:** records the day the project was last reviewed and is shown on the project card ("Reviewed on …"). It is a record only and never raises alerts.
 - **Duplicate inventory alerts:** the same serial number, MAC address (in any notation) or management IP on two devices is reported.
 - **Bulk edit:** in Interface map, **Select multiple ports** (Shift+click selects a range) and set status, VLAN or type on all of them at once.
-- **Rack view:** a front view of each rack in mounting order, with rails, numbered units and each device drawn as hardware (switch and patch panel jacks show the documented port status). Drag a device to another unit or rack, or drag one from *Not placed in a rack* onto a rack; with the keyboard, focus a device and press Up or Down to move it to the next free position. Rack, Position (U) and Height (U) can also be set in a device's Inventory details. **Rack size** in Project information sets the rack height (10–50U in steps of 5, plus the standard 42U; default 42U). Overlapping devices, and devices above the chosen size, are flagged.
+- **Rack view:** a front view of each rack in mounting order, with rails, numbered units and each device drawn as hardware (switch and patch panel jacks show the documented port status). Drag a device to another unit or rack, or drag one from _Not placed in a rack_ onto a rack; with the keyboard, focus a device and press Up or Down to move it to the next free position. Rack, Position (U) and Height (U) can also be set in a device's Inventory details. **Rack size** in Project information sets the rack height (10–50U in steps of 5, plus the standard 42U; default 42U). Overlapping devices, and devices above the chosen size, are flagged.
 - **Works offline:** the build generates a service worker; once loaded, the app opens without a connection and offers a reload when a new version is deployed.
 - Undo history for the last ten structural changes.
 - Visible save status and an emergency recovery export.
@@ -87,7 +87,9 @@ Run `npm run format` to apply the Prettier formatting that continuous integratio
 
 ## Deployment
 
-Run `npm ci` and `npm run dist`, then publish only the `dist/` folder over HTTPS on a dedicated origin. `dist/` includes `assets/` with its license files and excludes `node_modules/`, tests and tooling. On Netlify, `netlify.toml` does this automatically and applies the security headers. Keep the CSP defined in `index.html` and configure equivalent headers on other hosts.
+Run `npm ci` and `npm run dist`, then publish only the `dist/` folder over HTTPS. `dist/` has two parts: the landing page at `/` (built from `landing.html`) and the application at `/app/`, each with its own copy of the fonts and images it uses. The service worker is generated inside `/app/`, so offline caching never reaches the landing page. `dist/` excludes `node_modules/`, tests and tooling.
+
+The intended setup is a dedicated subdomain, for example `vnetcore.cjotasolutions.net` for the landing page and `vnetcore.cjotasolutions.net/app/` for the app. `vercel.json` and `netlify.toml` both run the build, publish `dist/` and apply the security headers; on Vercel the `/app` to `/app/` redirect is in `vercel.json`. Keep the CSP defined in `index.html` and `landing.html`, and configure equivalent headers on other hosts.
 
 The app makes no third-party requests: fonts are self-hosted.
 

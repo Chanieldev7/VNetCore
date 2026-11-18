@@ -250,7 +250,10 @@ test("rack placement survives CSV and JSON round trips", () => {
 });
 
 test("dist build precaches the app shell and leaves source artwork out", () => {
-  const worker = fs.readFileSync(path.join(root, "dist", "sw.js"), "utf8");
+  const worker = fs.readFileSync(
+    path.join(root, "dist", "app", "sw.js"),
+    "utf8",
+  );
   const precache = JSON.parse(
     worker.match(/const PRECACHE = (\[[\s\S]*?\]);/)[1],
   );
@@ -261,6 +264,34 @@ test("dist build precaches the app shell and leaves source artwork out", () => {
     !precache.some((file) => /VnetCore logo\.png|cjota_logo\.png/.test(file)),
   );
   assert.match(worker, /const VERSION = "[0-9a-f]{12}";/);
+});
+
+test("dist publishes the landing page at / and the app, with its worker, at /app/", () => {
+  const dist = path.join(root, "dist");
+  const landing = fs.readFileSync(path.join(dist, "index.html"), "utf8");
+  assert.match(landing, /<title>VNetCore<\/title>/);
+  assert.match(landing, /id="hero-title"/);
+  assert.ok(!/href="\.\/(\?demo=1)?"/.test(landing), "no links left to ./");
+  assert.ok(landing.includes('href="app/"'));
+  assert.ok(landing.includes('href="app/?demo=1"'));
+
+  // Every file the landing page loads is published next to it.
+  for (const file of landing.matchAll(
+    /(?:src|href)="((?:img|assets)\/[^"?#]+)"/g,
+  )) {
+    assert.ok(fs.existsSync(path.join(dist, file[1])), `landing ${file[1]}`);
+  }
+  for (const file of ["landing.css", "landing.js"]) {
+    assert.ok(fs.existsSync(path.join(dist, file)), file);
+  }
+
+  const app = fs.readFileSync(path.join(dist, "app", "index.html"), "utf8");
+  assert.match(app, /Infrastructure workspace/);
+  for (const file of ["boot.js", "demo-project.js", "manifest.webmanifest"]) {
+    assert.ok(fs.existsSync(path.join(dist, "app", file)), `app/${file}`);
+  }
+  // The worker belongs to /app/ only, so it can never control the landing page.
+  assert.ok(!fs.existsSync(path.join(dist, "sw.js")));
 });
 
 function rackFixture() {
