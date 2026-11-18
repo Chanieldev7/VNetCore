@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="VNetCore is a small browser tool for writing down your network: devices, ports, cables and racks. No account, no server."
+    />
+    <meta name="theme-color" content="#0b0d10" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
+    <title>VNetCore</title>
+    <link rel="icon" href="img/VnetCore-logo-108.png" type="image/png" />
+    <link rel="apple-touch-icon" href="img/VnetCore-logo-192.png" />
+    <link
+      rel="preload"
+      href="assets/fonts/ibm-plex-sans-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="assets/fonts.css" />
+    <link rel="stylesheet" href="landing.css" />
+    <script src="landing.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="bar">
+      <a class="bar-brand" href="#main">
+        <img src="img/VnetCore-logo-108.png" alt="" width="36" height="36" />
+        <span class="bar-name">VNetCore</span>
+      </a>
+      <nav class="bar-nav" aria-label="Page">
+        <a href="#what">Features</a>
+        <a href="#look">Workspace</a>
+        <a class="bar-app" href="./"
+          >Open the app <span aria-hidden="true">→</span></a
+        >
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="tag">Network notes, for people who run the cables</p>
+          <h1 id="hero-title">
+            Know what's plugged into <span class="nowrap">port 17.</span>
+          </h1>
+          <p class="lede">
+            VNetCore is a small tool for writing down your network: every
+            device, every port, every cable and where it goes. It runs in your
+            browser and keeps everything on your computer. Nothing to sign up
+            for.
+          </p>
+          <div class="hero-actions">
+            <a class="btn" href="./">Open VNetCore</a>
+            <a class="btn-quiet" href="./?demo=1">Try the demo project</a>
+          </div>
+          <p class="hero-note">
+            The demo opens a filled-in clinic network as a separate project, so
+            your own work is never touched. Already have a spreadsheet?
+            <a href="#data">Import it as CSV or JSON</a>.
+          </p>
+        </div>
+
+        <figure class="rig">
+          <div class="switch">
+            <div class="switch-head">
+              <span class="switch-name">access-sw-02</span>
+              <span class="switch-meta">24 LAN · 2 WAN</span>
+            </div>
+            <div class="faceplate">
+              <div class="ports" data-ports aria-hidden="true">
+                <i data-s="a"></i><i data-s="a"></i><i data-s="n"></i
+                ><i data-s="a"></i><i data-s="v"></i><i data-s="v"></i
+                ><i data-s="a"></i><i data-s="a"></i><i data-s="a"></i
+                ><i data-s="u"></i><i data-s="v"></i><i data-s="a"></i
+                ><i data-s="a"></i><i data-s="n"></i><i data-s="a"></i
+                ><i data-s="v"></i><i data-s="a" class="picked"></i
+                ><i data-s="a"></i><i data-s="v"></i><i data-s="v"></i
+                ><i data-s="a"></i><i data-s="n"></i><i data-s="v"></i
+                ><i data-s="a"></i>
+              </div>
+              <div class="uplinks" data-uplinks aria-hidden="true">
+                <i data-s="a"></i><i data-s="v"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="port-card" data-card aria-live="polite">
+            <div class="port-card-head">
+              <strong data-field="title">Port 17</strong>
+              <span class="pill" data-s="a" data-field="status">Active</span>
+            </div>
+            <dl>
+              <dt>VLAN</dt>
+              <dd data-field="vlan">20 · Cameras</dd>
+              <dt>Goes to</dt>
+              <dd data-field="to">cam-lobby-01 / eth0</dd>
+              <dt>IP</dt>
+              <dd data-field="ip">10.20.0.41</dd>
+              <dt>Notes</dt>
+              <dd data-field="notes">Ceiling, blue patch cable</dd>
+            </dl>
+          </div>
+
+          <figcaption class="legend">
+            <span><i data-s="a"></i>Active</span>
+            <span><i data-s="n"></i>No link</span>
+            <span><i data-s="v"></i>Available</span>
+            <span><i data-s="u"></i>Unknown device</span>
+            <span class="rig-hint" data-hint hidden
+              >Pick any port to see what's documented on it.</span
+            >
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="why" aria-labelledby="why-title">
+        <div class="why-inner">
+          <h2 id="why-title">
+            Your network shouldn't live in one person's head.
+          </h2>
+          <p>
+            Spreadsheets go stale and patch panel photos get lost. VNetCore
+            gives that knowledge a place, so the next person, or you in six
+            months, can find it.
+          </p>
+        </div>
+      </section>
+
+      <section id="look" class="look" aria-labelledby="look-title">
+        <div class="section-head">
+          <h2 id="look-title">This is the actual workspace</h2>
+          <p>
+            Screenshots from VNetCore with a small clinic network filled in.
+            Nothing here is a mock-up. Select one to see it full size.
+          </p>
+        </div>
+
+        <figure class="shot shot-wide">
+          <a class="shot-link" href="img/landing-ports.webp" data-viewer>
+            <img
+              src="img/landing-ports.webp"
+              alt="VNetCore interface map for the switch access-sw-02: filters by status and VLAN, and a grid of port tiles showing each port's status, type and what it connects to."
+              width="2880"
+              height="1800"
+              loading="lazy"
+              decoding="async"
+            />
+            <span class="shot-zoom" aria-hidden="true">Enlarge</span>
+          </a>
+          <figcaption>
+            <strong>Interface map.</strong> Every port with its status, type and
+            destination. Filter by status or VLAN, or select several ports and
+            edit them at once.
+          </figcaption>
+        </figure>
+
+        <div class="shot-pair">
+          <figure class="shot shot-rack">
+            <a class="shot-link" href="img/landing-rack.webp" data-viewer>
+              <img
+                src="img/landing-rack.webp"
+                alt="Rack view of a 25U rack with a firewall, patch panel, two switches, two servers and a UPS drawn as hardware, with port lights matching their documented status."
+                width="880"
+                height="1410"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="shot-zoom" aria-hidden="true">Enlarge</span>
+            </a>
+            <figcaption>
+              <strong>Rack view.</strong> Devices drawn as hardware, in mounting
+              order. Drag one to move it.
+            </figcaption>
+          </figure>
+
+          <figure class="shot">
+            <a class="shot-link" href="img/landing-links.webp" data-viewer>
+              <img
+                src="img/landing-links.webp"
+                alt="Connection map showing seven devices as boxes, with lines for the documented links between the switches, firewall, servers and UPS."
+                width="2654"
+                height="832"
+                loading="lazy"
+                decoding="async"
+              />
+              <span class="shot-zoom" aria-hidden="true">Enlarge</span>
+            </a>
+            <figcaption>
+              <strong>Connection map.</strong> Documented links between devices.
+              Pick a cable to highlight both ends.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="what" class="what" aria-labelledby="what-title">
+        <h2 id="what-title">What you can do with it</h2>
+
+        <ol class="specs">
+          <li>
+            <span class="spec-label">Ports</span>
+            <div>
+              <h3>A map of every port</h3>
+              <p>
+                Mark each port as active, no link, available or unknown. Add the
+                VLAN, IP, destination and a note. Drag one port onto another to
+                move its data, or select several and change them together.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="spec-label">Links</span>
+            <div>
+              <h3>Who connects to whom</h3>
+              <p>
+                Link two ports and both ends stay in sync. The connection map
+                shows every device and highlights both sides of a cable when you
+                pick it.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="spec-label">Racks</span>
+            <div>
+              <h3>A front view of your racks</h3>
+              <p>
+                Place devices by unit and height, drag them around, and spot
+                overlaps. Switches and patch panels show their real port status.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="spec-label">Checks</span>
+            <div>
+              <h3>It notices the mess</h3>
+              <p>
+                Repeated IPs, the same MAC or serial on two devices, links with
+                a missing end, ports marked active with nothing documented. You
+                decide what to fix.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="spec-label">Print</span>
+            <div>
+              <h3>A report for the binder</h3>
+              <p>
+                Print a PDF with every device and every port field, for the
+                folder that lives in the server room.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span class="spec-label">Offline</span>
+            <div>
+              <h3>Works without internet</h3>
+              <p>
+                Once it has loaded, it opens without a connection. Handy in a
+                basement closet with no signal.
+              </p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section id="data" class="data" aria-labelledby="data-title">
+        <div class="data-inner">
+          <div class="section-head">
+            <p class="tag">No database · No account · No server</p>
+            <h2 id="data-title">Your project is yours, and it stays here</h2>
+            <p>
+              VNetCore has no backend. Nothing you type leaves your computer,
+              and the page makes no requests to anyone else, not even for fonts.
+            </p>
+          </div>
+
+          <div class="data-cols">
+            <div class="data-col">
+              <h3>Where it's saved</h3>
+              <ul class="facts">
+                <li>In this browser, on this device</li>
+                <li>The previous version is kept before every save</li>
+                <li>Undo covers the last ten changes</li>
+                <li>
+                  Data it can't read is set aside for recovery, never
+                  overwritten
+                </li>
+              </ul>
+            </div>
+
+            <div class="data-col">
+              <h3>Moving it around</h3>
+              <ul class="facts">
+                <li><b>JSON</b> is the complete backup</li>
+                <li><b>CSV</b> opens in any spreadsheet</li>
+                <li>Imports show a summary before replacing anything</li>
+                <li>
+                  Starting from a spreadsheet? Get the CSV template in
+                  <b>Import → Format guide &amp; templates</b>
+                </li>
+              </ul>
+            </div>
+
+            <div class="data-col backup">
+              <h3>How to back up</h3>
+              <ol class="backup-steps">
+                <li>Open <b>Export</b> and choose <b>Export JSON</b>.</li>
+                <li>
+                  Keep the file somewhere safe: a USB drive, a shared folder.
+                </li>
+                <li>
+                  To restore, use <b>Import → Import JSON</b>, check the summary
+                  and confirm.
+                </li>
+              </ol>
+            </div>
+          </div>
+
+          <p class="data-warn">
+            Clearing your browser's site data deletes your projects, so export a
+            copy now and then. And don't store passwords or keys in it.
+          </p>
+        </div>
+      </section>
+
+      <section class="start" aria-labelledby="start-title">
+        <h2 id="start-title">Getting started takes a minute</h2>
+        <ol class="steps">
+          <li>
+            <span class="step-n">1</span>
+            <p>Open VNetCore. A blank project is waiting.</p>
+          </li>
+          <li>
+            <span class="step-n">2</span>
+            <p>Add a device: give it a name and how many ports it has.</p>
+          </li>
+          <li>
+            <span class="step-n">3</span>
+            <p>Click a port and write down what's on the other end.</p>
+          </li>
+        </ol>
+        <div class="hero-actions">
+          <a class="btn" href="./">Open VNetCore</a>
+          <a class="btn-quiet" href="./?demo=1">Try the demo project</a>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="viewer" data-viewer-dialog aria-labelledby="viewer-title">
+      <div class="viewer-bar">
+        <p id="viewer-title" class="viewer-title" data-viewer-title></p>
+        <div class="viewer-actions">
+          <button type="button" class="viewer-btn" data-viewer-prev>
+            <span aria-hidden="true">←</span>
+            <span class="visually-hidden">Previous screenshot</span>
+          </button>
+          <button type="button" class="viewer-btn" data-viewer-next>
+            <span aria-hidden="true">→</span>
+            <span class="visually-hidden">Next screenshot</span>
+          </button>
+          <button
+            type="button"
+            class="viewer-btn"
+            data-viewer-zoom
+            aria-pressed="false"
+          >
+            Actual size
+          </button>
+          <button type="button" class="viewer-btn" data-viewer-close>
+            Close
+          </button>
+        </div>
+      </div>
+      <div class="viewer-stage" data-viewer-stage></div>
+    </dialog>
+
+    <footer class="foot">
+      <p>© 2026 Chaniel J. López Soto</p>
+      <p class="foot-credit">
+        <img
+          src="img/cjota-logo-80.webp"
+          alt=""
+          width="28"
+          height="28"
+          loading="lazy"
+          decoding="async"
+        />
+        Made by CJota Solutions
+      </p>
+    </footer>
+  </body>
+</html>

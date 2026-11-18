@@ -11,29 +11,47 @@
     <meta name="referrer" content="no-referrer" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"
     />
-    <title>VNetCore | Network Infrastructure Documentation</title>
+    <title>VNetCore</title>
     <link rel="icon" href="img/VnetCore-logo-108.png" type="image/png" />
+    <link rel="apple-touch-icon" href="img/VnetCore-logo-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />
+    <script src="boot.js"></script>
+    <link
+      rel="preload"
+      href="assets/fonts/ibm-plex-sans-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="assets/fonts.css" />
+    <link rel="stylesheet" href="assets/notifications.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <a class="skip-link" href="#mainContent">Skip to workspace</a>
     <header class="topbar">
       <div class="brand">
-        <img
-          src="img/VnetCore-logo-108.png"
-          alt="VNetCore Logo"
-          class="brand-logo"
-          width="54"
-          height="54"
-        />
+        <span class="brand-logo-frame">
+          <img
+            src="img/VnetCore-logo-108.png"
+            alt="VNetCore Logo"
+            class="brand-logo"
+            width="54"
+            height="54"
+          />
+          <span class="brand-logo-halos" aria-hidden="true">
+            <i class="brand-logo-halo active"></i>
+            <i class="brand-logo-halo no-link"></i>
+            <i class="brand-logo-halo available"></i>
+            <i class="brand-logo-halo unknown-device"></i>
+          </span>
+        </span>
 
         <div>
           <span class="brand-kicker">Infrastructure workspace</span>
           <h1>VNetCore</h1>
-          <p>Network Infrastructure Documentation</p>
         </div>
       </div>
 
@@ -69,6 +87,14 @@
               tabindex="-1"
             >
               Import CSV
+            </button>
+            <button
+              id="importGuideBtn"
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+            >
+              Format guide &amp; templates
             </button>
           </div>
         </div>
@@ -115,6 +141,36 @@
             />
           </svg>
           Print / PDF
+        </button>
+
+        <button
+          id="themeToggleBtn"
+          class="theme-toggle"
+          type="button"
+          aria-pressed="false"
+          aria-label="Switch to light mode"
+          title="Switch to light mode"
+        >
+          <svg
+            class="theme-icon theme-icon-moon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z"
+            />
+          </svg>
+          <svg
+            class="theme-icon theme-icon-sun"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="4" />
+            <path
+              d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+            />
+          </svg>
+          <span class="theme-toggle-label">Light mode</span>
         </button>
       </div>
     </header>
@@ -176,12 +232,34 @@
             <h2>Project Information</h2>
           </summary>
           <div class="project-toolbar">
+            <button id="newBlankProjectBtn" class="secondary-btn" type="button">
+              New Project
+            </button>
+          </div>
+
+          <label class="project-label" for="projectSelect">
+            Workspace project
+            <select id="projectSelect"></select>
+          </label>
+
+          <div
+            class="project-actions"
+            role="group"
+            aria-label="Project actions"
+          >
             <button
-              id="newBlankProjectBtn"
+              id="duplicateProjectBtn"
+              class="secondary-btn"
+              type="button"
+            >
+              Duplicate
+            </button>
+            <button
+              id="deleteProjectBtn"
               class="danger-small-btn"
               type="button"
             >
-              New Project
+              Delete
             </button>
           </div>
 
@@ -205,12 +283,48 @@
             />
           </label>
 
-          <label class="project-label date-field">
-            Review date
+          <div class="project-label date-field">
+            <label for="projectReviewDateInput">Review date</label>
             <span class="date-input-shell">
               <input id="projectReviewDateInput" type="date" />
+              <button
+                id="reviewDatePickerBtn"
+                class="date-picker-toggle"
+                type="button"
+                aria-label="Choose review date"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+                aria-controls="datePicker"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path d="M16 3v4M8 3v4M3 11h18" />
+                </svg>
+              </button>
             </span>
+          </div>
+
+          <label class="project-label" for="projectRackUnitsSelect">
+            Rack size
+            <select
+              id="projectRackUnitsSelect"
+              aria-describedby="projectRackUnitsHint"
+            >
+              <option value="10">10U</option>
+              <option value="15">15U</option>
+              <option value="20">20U</option>
+              <option value="25">25U</option>
+              <option value="30">30U</option>
+              <option value="35">35U</option>
+              <option value="40">40U</option>
+              <option value="42">42U (standard)</option>
+              <option value="45">45U</option>
+              <option value="50">50U</option>
+            </select>
           </label>
+          <p id="projectRackUnitsHint" class="field-hint">
+            Height of the racks in Rack view.
+          </p>
 
           <p
             id="saveStatus"
@@ -319,12 +433,112 @@
               <input
                 name="lanPorts"
                 type="number"
-                min="1"
+                min="0"
                 max="96"
                 value="24"
                 required
               />
             </label>
+
+            <details class="device-details-fields">
+              <summary>Inventory details <span>(optional)</span></summary>
+              <div class="device-details-grid">
+                <label>
+                  Manufacturer
+                  <input
+                    name="manufacturer"
+                    type="text"
+                    maxlength="80"
+                    autocomplete="off"
+                    placeholder="Fortinet, Cisco, Ubiquiti"
+                  />
+                </label>
+                <label>
+                  Serial number
+                  <input
+                    name="serialNumber"
+                    type="text"
+                    maxlength="80"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </label>
+                <label>
+                  MAC address
+                  <input
+                    name="macAddress"
+                    type="text"
+                    maxlength="40"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="AA:BB:CC:DD:EE:FF"
+                  />
+                </label>
+                <label>
+                  Management IP
+                  <input
+                    name="managementIp"
+                    type="text"
+                    maxlength="80"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="192.168.1.1"
+                  />
+                </label>
+                <label>
+                  Firmware / OS
+                  <input
+                    name="firmware"
+                    type="text"
+                    maxlength="80"
+                    autocomplete="off"
+                    placeholder="FortiOS 7.4.3"
+                  />
+                </label>
+                <label>
+                  Rack
+                  <input
+                    name="rack"
+                    type="text"
+                    maxlength="80"
+                    autocomplete="off"
+                    placeholder="MDF rack 1"
+                  />
+                </label>
+                <div class="rack-position-fields">
+                  <label>
+                    Position (U)
+                    <input
+                      name="rackUnit"
+                      type="number"
+                      min="1"
+                      max="60"
+                      inputmode="numeric"
+                      placeholder="Lowest unit"
+                    />
+                  </label>
+                  <label>
+                    Height (U)
+                    <input
+                      name="rackHeight"
+                      type="number"
+                      min="1"
+                      max="20"
+                      inputmode="numeric"
+                      placeholder="1"
+                    />
+                  </label>
+                </div>
+                <label class="device-notes-field">
+                  Device notes
+                  <textarea
+                    name="deviceNotes"
+                    maxlength="2000"
+                    placeholder="Warranty, support contract, access notes..."
+                  ></textarea>
+                </label>
+              </div>
+            </details>
 
             <button id="deviceSubmitBtn" type="submit">Add device</button>
             <button
@@ -342,15 +556,137 @@
         <section class="card project-title-card">
           <span>Active project</span>
           <h2 id="projectDisplayName">Unnamed project</h2>
+          <p id="projectReviewStatus" class="review-status" hidden></p>
+          <div class="project-ambient" aria-hidden="true">
+            <i class="project-color-phase project-color-wash is-circle"></i>
+            <i class="project-color-phase project-color-wash is-square"></i>
+            <i class="project-color-phase project-color-wash is-diamond"></i>
+            <i class="project-color-phase project-color-wash is-hexagon"></i>
+          </div>
+          <svg
+            class="project-geometry"
+            viewBox="-110 -110 220 220"
+            width="220"
+            height="220"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <defs>
+              <circle id="project-shape-circle" r="70" />
+              <rect
+                id="project-shape-square"
+                x="-64"
+                y="-64"
+                width="128"
+                height="128"
+                rx="16"
+              />
+              <polygon
+                id="project-shape-diamond"
+                points="0,-86 86,0 0,86 -86,0"
+              />
+              <polygon
+                id="project-shape-hexagon"
+                points="70,0 35,61 -35,61 -70,0 -35,-61 35,-61"
+              />
+            </defs>
+            <g class="project-color-phase project-geometry-shape is-circle">
+              <use
+                class="project-geometry-halo outer"
+                href="#project-shape-circle"
+              />
+              <use class="project-geometry-halo" href="#project-shape-circle" />
+              <use href="#project-shape-circle" />
+            </g>
+            <g class="project-color-phase project-geometry-shape is-square">
+              <use
+                class="project-geometry-halo outer"
+                href="#project-shape-square"
+              />
+              <use class="project-geometry-halo" href="#project-shape-square" />
+              <use href="#project-shape-square" />
+            </g>
+            <g class="project-color-phase project-geometry-shape is-diamond">
+              <use
+                class="project-geometry-halo outer"
+                href="#project-shape-diamond"
+              />
+              <use
+                class="project-geometry-halo"
+                href="#project-shape-diamond"
+              />
+              <use href="#project-shape-diamond" />
+            </g>
+            <g class="project-color-phase project-geometry-shape is-hexagon">
+              <use
+                class="project-geometry-halo outer"
+                href="#project-shape-hexagon"
+              />
+              <use
+                class="project-geometry-halo"
+                href="#project-shape-hexagon"
+              />
+              <use href="#project-shape-hexagon" />
+            </g>
+          </svg>
         </section>
 
         <p id="portDraftSummary" class="draft-summary" role="status" hidden></p>
+
+        <details class="card network-alerts-card" id="networkAlerts">
+          <summary class="network-alerts-toggle">
+            <span>
+              <span class="section-eyebrow">Documentation checks</span>
+              <strong id="networkAlertsTitle">Network alerts</strong>
+            </span>
+            <span
+              id="networkAlertsCount"
+              class="insight-count"
+              role="status"
+            ></span>
+          </summary>
+          <p class="insight-description">
+            Checks use saved documentation, not a live network scan. Review
+            warnings before making changes.
+          </p>
+          <label class="insight-filter" for="networkAlertFilter">
+            Show
+            <select id="networkAlertFilter">
+              <option value="all">All checks</option>
+              <option value="duplicate-ip">Possible duplicate IPs</option>
+              <option value="incomplete-link">Incomplete links</option>
+              <option value="missing-destination">Missing destinations</option>
+              <option value="link-status">Linked port statuses</option>
+              <option value="multiple-links">Ports with multiple links</option>
+              <option value="duplicate-inventory">
+                Duplicate serials, MACs or management IPs
+              </option>
+              <option value="rack-overlap">Rack overlaps</option>
+              <option value="rack-overflow">Devices above the rack size</option>
+            </select>
+          </label>
+          <p
+            id="networkAlertsSummary"
+            class="insight-description"
+            role="status"
+          ></p>
+          <ul id="networkAlertsList" class="network-alerts-list"></ul>
+          <button
+            id="showMoreAlertsBtn"
+            class="secondary-btn"
+            type="button"
+            hidden
+          >
+            Show more alerts
+          </button>
+        </details>
 
         <section class="device-header card">
           <div>
             <span id="deviceType" class="tag"></span>
             <h2 id="deviceName">No device selected</h2>
             <p id="deviceMeta"></p>
+            <dl id="deviceDetailsList" class="device-details-list" hidden></dl>
           </div>
 
           <div class="legend">
@@ -402,7 +738,7 @@
           </div>
         </section>
 
-        <section class="card ports-card">
+        <section class="card ports-card device-console">
           <div class="content-heading">
             <div>
               <span class="section-eyebrow">Interface map</span>
@@ -410,17 +746,171 @@
             </div>
             <p>Select a port to review or update its connection.</p>
           </div>
-          <p id="portScrollHint" class="scroll-hint" hidden>
-            More ports are off screen. Scroll horizontally, or focus the map and
-            use the arrow keys.
-          </p>
-          <section
-            id="portGrid"
-            class="port-grid"
-            aria-label="Device ports"
-            aria-describedby="portScrollHint"
-            tabindex="0"
-          ></section>
+          <div class="port-filter-toolbar" id="portFilterToolbar">
+            <div
+              class="port-status-filters"
+              role="group"
+              aria-label="Filter ports by status"
+            >
+              <button
+                class="port-filter"
+                type="button"
+                data-port-status="all"
+                aria-pressed="true"
+              >
+                All
+              </button>
+              <button
+                class="port-filter"
+                type="button"
+                data-port-status="active"
+                aria-pressed="false"
+              >
+                Active
+              </button>
+              <button
+                class="port-filter"
+                type="button"
+                data-port-status="no-link"
+                aria-pressed="false"
+              >
+                No link
+              </button>
+              <button
+                class="port-filter"
+                type="button"
+                data-port-status="available"
+                aria-pressed="false"
+              >
+                Available
+              </button>
+              <button
+                class="port-filter"
+                type="button"
+                data-port-status="unknown-device"
+                aria-pressed="false"
+              >
+                Unknown Device
+              </button>
+            </div>
+            <label class="port-vlan-filter" for="portVlanFilter">
+              VLAN
+              <input
+                id="portVlanFilter"
+                type="search"
+                maxlength="80"
+                placeholder="ID or name"
+              />
+            </label>
+            <button
+              id="resetPortFiltersBtn"
+              class="secondary-btn"
+              type="button"
+              disabled
+            >
+              Reset filters
+            </button>
+          </div>
+          <p
+            id="portFilterSummary"
+            class="insight-description"
+            role="status"
+          ></p>
+          <div class="bulk-bar">
+            <button
+              id="bulkModeBtn"
+              class="secondary-btn"
+              type="button"
+              aria-pressed="false"
+              aria-describedby="bulkModeHint"
+            >
+              Select multiple ports
+            </button>
+            <p id="bulkModeHint" class="field-hint">
+              Select ports to change them together. Shift+click selects a range.
+            </p>
+            <div
+              id="bulkTools"
+              class="bulk-tools"
+              role="group"
+              aria-label="Edit selected ports"
+              hidden
+            >
+              <p id="bulkCount" class="bulk-count" role="status">
+                0 ports selected
+              </p>
+              <div class="bulk-selection-actions">
+                <button
+                  id="bulkSelectShownBtn"
+                  class="secondary-btn"
+                  type="button"
+                >
+                  Select all shown
+                </button>
+                <button
+                  id="bulkClearSelectionBtn"
+                  class="secondary-btn"
+                  type="button"
+                >
+                  Clear selection
+                </button>
+              </div>
+              <div class="bulk-fields">
+                <label>
+                  Status
+                  <select id="bulkStatus">
+                    <option value="">Keep current</option>
+                    <option value="available">Available</option>
+                    <option value="active">Active</option>
+                    <option value="no-link">No link</option>
+                    <option value="unknown-device">Unknown Device</option>
+                  </select>
+                </label>
+                <label>
+                  VLAN
+                  <input
+                    id="bulkVlan"
+                    type="text"
+                    maxlength="80"
+                    placeholder="Keep current"
+                  />
+                </label>
+                <label>
+                  Type
+                  <input
+                    id="bulkType"
+                    type="text"
+                    maxlength="120"
+                    placeholder="Keep current"
+                  />
+                </label>
+              </div>
+              <div class="bulk-apply-actions">
+                <button id="bulkApplyBtn" type="button" disabled>
+                  Apply to selected
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="device-frame">
+            <div class="device-frame-header" aria-hidden="true">
+              <span class="device-screw"></span>
+              <span class="device-model-label">NETWORK INTERFACE PANEL</span>
+              <span class="device-leds"><i></i><i></i><i></i></span>
+              <span class="device-screw"></span>
+            </div>
+            <p id="portScrollHint" class="scroll-hint" hidden>
+              More ports are off screen. Scroll horizontally, or focus the map
+              and use the arrow keys.
+            </p>
+            <section
+              id="portGrid"
+              class="port-grid"
+              aria-label="Device ports"
+              aria-describedby="portScrollHint"
+              tabindex="0"
+            ></section>
+          </div>
         </section>
 
         <section class="card details">
@@ -475,6 +965,21 @@
               />
             </label>
 
+            <div class="linked-port-field">
+              <label for="connectedPortSelect">Linked port</label>
+              <select name="connectedPort" id="connectedPortSelect">
+                <option value="">No linked port</option>
+              </select>
+              <button
+                id="openLinkedPortBtn"
+                class="secondary-btn linked-port-action"
+                type="button"
+                hidden
+              >
+                Open linked port
+              </button>
+            </div>
+
             <label>
               VLAN
               <input
@@ -514,8 +1019,32 @@
               >
                 Discard changes
               </button>
+              <button id="clearPortBtn" class="danger-small-btn" type="button">
+                Clear port
+              </button>
+              <button id="backToPortsBtn" class="secondary-btn" type="button">
+                Back to ports
+              </button>
             </div>
           </form>
+
+          <div class="port-move">
+            <label for="movePortSelect">Move this port's data to</label>
+            <div class="port-move-row">
+              <select
+                id="movePortSelect"
+                aria-describedby="movePortHint"
+              ></select>
+              <button id="movePortBtn" class="secondary-btn" type="button">
+                Move
+              </button>
+            </div>
+            <p id="movePortHint" class="field-hint">
+              Only Available ports without a link are listed. The two ports swap
+              their data, so nothing is lost. You can also drag a port onto an
+              Available port in the map.
+            </p>
+          </div>
         </section>
 
         <section class="card other-devices-card">
@@ -528,10 +1057,335 @@
           </div>
           <div id="projectDevicesSummary" class="project-devices-summary"></div>
         </section>
+
+        <section class="card topology-card" aria-labelledby="topologyTitle">
+          <div class="content-heading">
+            <div>
+              <span class="section-eyebrow">Network topology</span>
+              <h2 id="topologyTitle">Connection map</h2>
+            </div>
+            <p>Documented links only, not a live network scan.</p>
+          </div>
+          <div class="topology-controls">
+            <label for="topologyScope">
+              View
+              <select id="topologyScope">
+                <option value="all">All devices</option>
+                <option value="neighbors">Selected device + neighbors</option>
+              </select>
+            </label>
+            <p
+              id="topologySummary"
+              class="insight-description"
+              role="status"
+            ></p>
+          </div>
+          <p id="topologyHint" class="insight-description">
+            Select a device to review it, or select a link to highlight both
+            ends. The connection list is also keyboard accessible.
+          </p>
+          <section
+            class="topology-viewport"
+            tabindex="0"
+            aria-label="Scrollable connection map"
+            aria-describedby="topologyHint"
+          >
+            <div id="topologyCanvas" class="topology-canvas"></div>
+          </section>
+          <section
+            id="topologySelectedLink"
+            class="topology-selected-link"
+            aria-label="Selected connection"
+            hidden
+          ></section>
+          <h3 class="topology-list-title">Documented connections</h3>
+          <ul id="topologyConnectionList" class="topology-connection-list"></ul>
+          <button
+            id="showMoreConnectionsBtn"
+            class="secondary-btn"
+            type="button"
+            hidden
+          >
+            Show more connections
+          </button>
+        </section>
+
+        <section class="card rack-card" aria-labelledby="rackTitle">
+          <div class="content-heading">
+            <div>
+              <span class="section-eyebrow">Physical layout</span>
+              <h2 id="rackTitle">Rack view</h2>
+            </div>
+            <p>Front view, in mounting order. Select a device to open it.</p>
+          </div>
+          <p id="rackSummary" class="insight-description" role="status"></p>
+          <p id="rackHint" class="field-hint">
+            Drag a device to another position or rack. With the keyboard, focus
+            a device and press the Up or Down arrow key to move it; press Enter
+            to open it.
+          </p>
+          <div id="rackView" class="rack-view"></div>
+          <div id="rackUnplaced" class="rack-unplaced" hidden></div>
+        </section>
       </section>
     </main>
 
     <section id="printReport" class="print-report"></section>
+
+    <dialog
+      id="importGuideDialog"
+      class="modal guide-modal"
+      aria-labelledby="importGuideTitle"
+    >
+      <form method="dialog" class="modal-content guide-content">
+        <div class="guide-header">
+          <div>
+            <span class="section-eyebrow">Import</span>
+            <h2 id="importGuideTitle">File format guide</h2>
+          </div>
+          <button
+            class="secondary-btn guide-close"
+            type="submit"
+            value="cancel"
+            aria-label="Close format guide"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M6 18 18 6" />
+            </svg>
+          </button>
+        </div>
+
+        <p>
+          VNetCore imports <strong>JSON</strong> (recommended, a complete
+          backup) and <strong>CSV</strong> (for spreadsheets). The quickest
+          start is to download a template, edit it, and import it.
+        </p>
+        <div class="guide-actions">
+          <button id="downloadJsonTemplateBtn" type="button">
+            Download JSON template
+          </button>
+          <button
+            id="downloadCsvTemplateBtn"
+            class="secondary-btn"
+            type="button"
+          >
+            Download CSV template
+          </button>
+        </div>
+
+        <h3>Rules for both formats</h3>
+        <ul>
+          <li>Save the file as UTF-8. The maximum size is 5 MB.</li>
+          <li>Up to 500 devices, and up to 512 ports per device.</li>
+          <li>
+            Port status must be <code>active</code>, <code>no-link</code>,
+            <code>available</code> or <code>unknown-device</code>.
+          </li>
+          <li>
+            Port kind must be <code>LAN</code> or <code>WAN</code>. Each kind
+            and number appears once per device (for example, one LAN 1).
+          </li>
+          <li>
+            Review dates use <code>YYYY-MM-DD</code>, for example 2026-12-31.
+          </li>
+          <li>
+            Importing shows a summary first, then replaces the active project.
+            Other projects are not changed.
+          </li>
+        </ul>
+
+        <h3>JSON</h3>
+        <p>
+          A project object with a <code>devices</code> array. Only
+          <code>devices</code> is required; every other field is optional.
+        </p>
+        <div class="guide-table-wrap">
+          <table class="guide-table">
+            <caption>
+              JSON fields
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Field</th>
+                <th scope="col">Where</th>
+                <th scope="col">Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>projectName</code>, <code>owner</code></td>
+                <td>Project</td>
+                <td>Text, up to 120 characters</td>
+              </tr>
+              <tr>
+                <td><code>reviewDate</code></td>
+                <td>Project</td>
+                <td>YYYY-MM-DD</td>
+              </tr>
+              <tr>
+                <td><code>rackUnits</code></td>
+                <td>Project</td>
+                <td>
+                  Rack size: 10, 15, 20, 25, 30, 35, 40, 42, 45 or 50 (default
+                  42)
+                </td>
+              </tr>
+              <tr>
+                <td><code>devices</code></td>
+                <td>Project</td>
+                <td>Array of devices (required)</td>
+              </tr>
+              <tr>
+                <td><code>connections</code></td>
+                <td>Project</td>
+                <td>Array of links between ports</td>
+              </tr>
+              <tr>
+                <td><code>id</code></td>
+                <td>Device, port</td>
+                <td>Unique text. Needed only to link ports.</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>name</code>, <code>type</code>, <code>location</code>
+                </td>
+                <td>Device</td>
+                <td>Text</td>
+              </tr>
+              <tr>
+                <td><code>portLayout</code></td>
+                <td>Device</td>
+                <td><code>alternating</code> or <code>split</code></td>
+              </tr>
+              <tr>
+                <td>
+                  <code>manufacturer</code>, <code>serialNumber</code>,
+                  <code>macAddress</code>, <code>managementIp</code>,
+                  <code>firmware</code>, <code>rack</code>, <code>notes</code>
+                </td>
+                <td>Device</td>
+                <td>Optional inventory details</td>
+              </tr>
+              <tr>
+                <td><code>rackUnit</code>, <code>rackHeight</code></td>
+                <td>Device</td>
+                <td>
+                  Lowest rack unit the device uses (1–60) and its height in
+                  units (1–20, default 1). Needs a <code>rack</code> name.
+                </td>
+              </tr>
+              <tr>
+                <td><code>ports</code></td>
+                <td>Device</td>
+                <td>Array of ports</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>portKind</code>, <code>number</code>,
+                  <code>status</code>
+                </td>
+                <td>Port</td>
+                <td>LAN/WAN, 1–512, a status above</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>connectionType</code>, <code>connectedTo</code>,
+                  <code>vlan</code>, <code>address</code>, <code>notes</code>
+                </td>
+                <td>Port</td>
+                <td>Text</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>firstDeviceId</code>, <code>firstPortId</code>,
+                  <code>secondDeviceId</code>, <code>secondPortId</code>
+                </td>
+                <td>Connection</td>
+                <td>IDs of two existing ports</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <pre class="guide-code" tabindex="0" aria-label="JSON example"><code>{
+  "projectName": "Main office",
+  "reviewDate": "2026-12-31",
+  "devices": [
+    {
+      "id": "fw1", "name": "Edge firewall", "type": "Firewall",
+      "serialNumber": "FGT60F0000001",
+      "ports": [
+        { "id": "fw1-1", "portKind": "LAN", "number": 1, "status": "active" }
+      ]
+    },
+    {
+      "id": "sw1", "name": "Core switch", "type": "Switch",
+      "ports": [
+        { "id": "sw1-1", "portKind": "LAN", "number": 1, "status": "active",
+          "vlan": "10 / Admin" }
+      ]
+    }
+  ],
+  "connections": [
+    { "firstDeviceId": "fw1", "firstPortId": "fw1-1",
+      "secondDeviceId": "sw1", "secondPortId": "sw1-1" }
+  ]
+}</code></pre>
+
+        <h3>CSV</h3>
+        <p>
+          The first row lists column names. Columns are matched by name, so
+          their order does not matter and empty columns can be left blank. Each
+          row is one record, set by <code>recordType</code>:
+        </p>
+        <ul>
+          <li>
+            <code>PROJECT</code>: one row with <code>projectName</code>,
+            <code>projectOwner</code>, <code>reviewDate</code> and
+            <code>projectRackUnits</code>.
+          </li>
+          <li>
+            <code>DEVICE</code>: one row per device with <code>deviceId</code>,
+            <code>deviceName</code>, <code>deviceType</code>,
+            <code>deviceLocation</code>, <code>portLayout</code> and the
+            optional <code>deviceManufacturer</code>,
+            <code>deviceSerialNumber</code>, <code>deviceMacAddress</code>,
+            <code>deviceManagementIp</code>, <code>deviceFirmware</code>,
+            <code>deviceNotes</code>, <code>deviceRack</code>,
+            <code>deviceRackUnit</code> and <code>deviceRackHeight</code>.
+          </li>
+          <li>
+            <code>PORT</code>: one row per port with the
+            <code>deviceId</code> it belongs to, <code>portId</code>,
+            <code>portKind</code>, <code>portNumber</code>, <code>status</code>,
+            <code>connectionType</code>, <code>connectedTo</code>,
+            <code>vlan</code>, <code>address</code> and <code>notes</code>.
+          </li>
+          <li>
+            To link two ports, fill <code>linkedDeviceId</code> and
+            <code>linkedPortId</code> on one of the two PORT rows.
+          </li>
+        </ul>
+        <pre
+          class="guide-code"
+          tabindex="0"
+          aria-label="CSV example"
+        ><code>recordType,projectName,deviceId,deviceName,deviceType,portId,portKind,portNumber,status,vlan,linkedDeviceId,linkedPortId
+PROJECT,Main office,,,,,,,,,,
+DEVICE,,fw1,Edge firewall,Firewall,,,,,,,
+DEVICE,,sw1,Core switch,Switch,,,,,,,
+PORT,,fw1,,,fw1-1,LAN,1,active,,sw1,sw1-1
+PORT,,sw1,,,sw1-1,LAN,1,active,10 / Admin,,</code></pre>
+        <p class="privacy-note">
+          Values that contain commas or line breaks must be wrapped in double
+          quotes. On export, values starting with = + - or @ get a leading
+          apostrophe so spreadsheets do not run them as formulas; VNetCore
+          removes it again on import.
+        </p>
+        <div class="modal-actions">
+          <button type="submit" value="cancel">Close</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="importDialog" class="modal" aria-labelledby="importDialogTitle">
       <form method="dialog" class="modal-content">
@@ -556,12 +1410,30 @@
       id="confirmDialog"
       class="modal"
       aria-labelledby="confirmDialogTitle"
+      aria-describedby="confirmDialogMessage"
     >
-      <form method="dialog" class="modal-content">
-        <h2 id="confirmDialogTitle">Confirm action</h2>
-        <p id="confirmDialogMessage"></p>
+      <form method="dialog" class="modal-content confirm-dialog-content">
+        <span class="confirm-dialog-icon" aria-hidden="true">
+          <svg class="icon-danger" viewBox="0 0 24 24" focusable="false">
+            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5" />
+          </svg>
+          <svg class="icon-neutral" viewBox="0 0 24 24" focusable="false">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v6M12 7.5h.01" />
+          </svg>
+        </span>
+        <div class="confirm-dialog-text">
+          <h2 id="confirmDialogTitle">Confirm action</h2>
+          <p id="confirmDialogMessage"></p>
+        </div>
         <div class="modal-actions">
-          <button type="submit" value="cancel" class="secondary-btn">
+          <button
+            id="confirmDialogCancel"
+            type="submit"
+            value="cancel"
+            class="secondary-btn"
+            autofocus
+          >
             Cancel
           </button>
           <button id="confirmDialogAction" type="submit" value="default">
@@ -595,17 +1467,75 @@
       </button>
     </div>
 
+    <div id="toastRoot"></div>
+
+    <div
+      id="datePicker"
+      class="date-picker"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="datePickerTitle"
+      hidden
+    >
+      <div class="date-picker-header">
+        <button
+          class="date-picker-nav"
+          type="button"
+          data-step="-1"
+          aria-label="Previous month"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="m15 6-6 6 6 6" />
+          </svg>
+        </button>
+        <h2 id="datePickerTitle" class="date-picker-title" aria-live="polite">
+          Month
+        </h2>
+        <button
+          class="date-picker-nav"
+          type="button"
+          data-step="1"
+          aria-label="Next month"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </button>
+      </div>
+      <table
+        class="date-picker-grid"
+        role="grid"
+        aria-labelledby="datePickerTitle"
+      >
+        <thead>
+          <tr>
+            <th scope="col" abbr="Sunday">Su</th>
+            <th scope="col" abbr="Monday">Mo</th>
+            <th scope="col" abbr="Tuesday">Tu</th>
+            <th scope="col" abbr="Wednesday">We</th>
+            <th scope="col" abbr="Thursday">Th</th>
+            <th scope="col" abbr="Friday">Fr</th>
+            <th scope="col" abbr="Saturday">Sa</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="date-picker-footer">
+        <button type="button" data-action="today">Today</button>
+        <button type="button" data-action="clear">Clear</button>
+      </div>
+    </div>
+
     <footer class="footer">
       <div class="footer-content">
         <div class="footer-identity">
           <strong>VNetCore</strong>
-             <p>
-          © <span id="currentYear">2026</span> Chaniel J. López Soto. All rights
-          reserved.
-        </p>
+          <p>
+            © <span id="currentYear">2026</span> Chaniel J. López Soto. All
+            rights reserved.
+          </p>
         </div>
 
-     
         <div class="footer-credit">
           <img
             src="img/cjota-logo-80.webp"
@@ -621,7 +1551,9 @@
       </div>
     </footer>
 
+    <script src="assets/notifications.js"></script>
     <script src="core.js"></script>
     <script src="app.js"></script>
+    <script src="date-picker.js"></script>
   </body>
 </html>

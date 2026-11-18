@@ -4,13 +4,23 @@
   "private": true,
   "description": "Static network infrastructure documentation tool",
   "scripts": {
-    "check": "node --check core.js && node --check app.js",
-    "test": "npm run check && node --test tests/*.test.js"
+    "dev": "npm run build && npx --yes serve .",
+    "build": "node scripts/build-notifications.cjs && node scripts/build-fonts.cjs",
+    "check": "node --check boot.js && node --check core.js && node --check app.js && node --check date-picker.js && node --check landing.js && node --check demo-project.js && node --check scripts/build-notifications.cjs && node --check scripts/build-dist.cjs && node --check scripts/build-fonts.cjs && node --check scripts/sw-template.js",
+    "test": "npm run dist && npm run check && node --test tests/*.test.js",
+    "dist": "npm run build && node scripts/build-dist.cjs",
+    "format": "npx --yes prettier@3 --write index.html styles.css app.js core.js boot.js date-picker.js landing.html landing.css landing.js demo-project.js tests package.json"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
-    "jsdom": "^26.1.0"
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "esbuild": "^0.28.2",
+    "jsdom": "^26.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sonner": "^2.0.8"
   }
 }

@@ -2,14 +2,26 @@
   "name": "VNetCore Network Documentation",
   "short_name": "VNetCore",
   "description": "Local network infrastructure inventory and port documentation.",
+  "lang": "en",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#fffafb",
-  "theme_color": "#131515",
+  "background_color": "#080a0d",
+  "theme_color": "#080a0d",
   "icons": [
     {
       "src": "img/VnetCore-logo-108.png",
       "sizes": "108x108",
+      "type": "image/png"
+    },
+    {
+      "src": "img/VnetCore-logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "img/VnetCore-logo-512.png",
+      "sizes": "512x512",
       "type": "image/png"
     }
   ]
